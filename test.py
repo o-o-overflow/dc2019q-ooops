@@ -6,7 +6,7 @@ import re
 import ast
 log.startLogging(sys.stdout)
 
-PROXY_BASE = "/mgw"
+PROXY_BASE = "/mwg"
 
 
 def html(text):
@@ -19,6 +19,10 @@ def blocked(url):
     if "test" in url:
         return True
 
+with open("blocked.html", "r") as f:
+    PROXY_PAGE = f.read()
+
+BAD_URLS = ["127.0.0.1", "127.1", "localhost"]
 
 class MyProxy(proxy.Proxy):
     forceResp = False
@@ -30,20 +34,37 @@ class MyProxy(proxy.Proxy):
         self.transport.loseConnection()
 
     def dataReceived(self, data):
-        method = re.search(b'^[A-Z]* [a-zA-Z]*\:\/\/([a-zA-z0-9\-.]*)\/([A-Za-z0-9\/\-\_\.]*) HTTP\/\d.\d', data)
+        method = re.search(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z0-9_\:\\.\-\&\=\%])*)?)? HTTP\/\d.\d', data)
 
         if not method or not method.groups(0) or not method.groups(1):
-            print(repr(method))
+            print(repr(data))
             raise RuntimeError("Could not extract a URL/Path - FIXME")
 
-        url = method.groups(0)[0].decode("utf-8")
-        path = "/"+method.groups(0)[1].decode("utf-8")
-        print("Path: {} url: {}".format(url, path))
+        #print(method.groups())
+        meth  = method.groups(0)[0].decode("utf-8")
+
+        # Don't support HTTPS - TODO - send back an error?
+        if meth == "CONNECT":
+            print("Ignoring connect")
+            self.transport.loseConnection()
+            return
+
+        proto = method.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
+        url   = method.groups(0)[2].decode("utf-8") # Includes subdomains
+        port  = method.groups(0)[3] # Can be blank
+        path  = method.groups(1)[4].decode("utf-8")
+        query = method.groups(0)[6].decode("utf-8")
+
+        if query is not None: query = query[1:]
+
+        if url in BAD_URLS: # Don't proxy local ports to the internet, not fully secure, but a little bit helps?
+            self.transport.loseConnection()
+            return
 
         if path.startswith(PROXY_BASE):
-            print("DEAD")
+            print("Proxy this request")
             self.forceResp = "Proxy this page"
-            self.respond("Proxy<script>alert(1)</script>")
+            self.respond(PROXY_PAGE)
             #return None
 
         if blocked(url):
@@ -69,5 +90,5 @@ class ProxyFactory(http.HTTPFactory):
     protocol=MyProxy
 
 factory = ProxyFactory()
-reactor.listenTCP(8080, factory)
+reactor.listenTCP(7239, factory)
 reactor.run()
