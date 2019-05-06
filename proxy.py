@@ -8,8 +8,6 @@ import re
 import os
 log.startLogging(sys.stdout)
 
-# TODO add auth, remove port
-
 PORT=7239
 PROXY_BASE = "/prox-internal/de5fs23hu73ds"
 
@@ -21,7 +19,7 @@ def html(text):
 </html>""".format(text)
 
 def blocked(url, path):
-    if "test" in url and PROXY_BASE not in path: # Don't block internal pages, even on blocked sites
+    if "overflow" in url and PROXY_BASE not in path: # Don't block internal pages, even on blocked sites
         return True
     return False
 
@@ -44,18 +42,28 @@ class MyProxy(proxy.Proxy):
         #self.write(html(msg))
         self.transport.loseConnection()
 
-    def has_valid_creds(self, data):
-        data = data.decode("utf-8", "ignore")
-        if "Proxy-Authorization: " not in data: return False
-        postauth = data.split("Proxy-Authorization: ")[1]
-        if "\r\n" not in postauth: return False
-        auth_token = postauth.split("\n")[0].strip()
-        return auth_token=="Basic dXNlcjpwYXNz" # user:pass
-
-        # No valid creds, ask for them
+    def request_creds(self):
+        # Ask for credentials
         self.transport.write("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Access to proxy site\"\r\n\r\n{}".encode("utf-8"))
         self.transport.loseConnection()
-        return False
+
+    def has_valid_creds(self, data):
+        data = data.decode("utf-8", "ignore")
+        if "Proxy-Authorization: " not in data:
+            self.request_creds()
+            return False
+        postauth = data.split("Proxy-Authorization: ")[1]
+        if "\r\n" not in postauth:
+            print("Malformed proxy auth")
+            return False
+
+        auth_token = postauth.split("\n")[0].strip()
+        if auth_token=="Basic T25seU9uZTpPdmVyZmxvdw==": # OnlyOne:Overflow
+            return True
+        else:
+            self.request_creds()
+            return False
+
 
     def dataReceived(self, data):
         if not self.has_valid_creds(data): return False
@@ -142,7 +150,7 @@ factory = ProxyFactory()
 reactor.listenTCP(PORT, factory)
 
 """
-# TODO run over https
+# TODO: SSL
 reactor.listenSSL(PORT, factory,
         ssl.DefaultOpenSSLContextFactory(
             'cert/ca.key', 'cert/ca.crt'))

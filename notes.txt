@@ -1,0 +1,30 @@
+Description:  TODO
+        The Overflow is confident that you can't break our SSL. To prove it, we're POSTing flags from our corporate network to oooverflow.io all day long.
+Download: info.pac
+Score: 300 points
+
+1) Get obfscuated .pac file from challenge description which uses (TODO) load-balanced URL
+2) Deobfscuate to get credentials. Connect to proxy
+3) Identify proxy blocking (stack overflow hint?)
+4) Request unblocking of custom site -> see admin internal's referrer
+5) Explore blocked pages, identify xss
+6) Request unblock of xss'd admin internal page
+7) Exfil admin page
+8) Exploit admin page
+
+
+TODO:
+    Sqlite DB
+    Load unblocked pages on request
+    Captcha
+
+Database:
+    Flag
+        User    flag
+        admin   OOO{MuchCorporateSuchSecurity}
+
+
+    Requests
+        ID      IP          URL                 Visited
+        0       1.2.3.4     https://...         false
+        1       ...
