@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" /> 
+    <script src="/prox-internal/de5fs23hu73ds/scripts/main.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <link type="text/css" rel="stylesheet" href="/prox-internal/de5fs23hu73ds/css/jquery.hashcash.io.min.css" media="all" />
+    <script src="/prox-internal/de5fs23hu73ds/scripts/jquery.hashcash.io.min.js"></script>
+    <script src="/prox-internal/de5fs23hu73ds/scripts/main.js"></script>
+  </head>
+
+  <body>
+    <h1>Site Unblock Request</h1>
+      <form method="POST" action="/prox-internal/de5fs23hu73ds/reviewed.html">
+      URL: <input type="text" name="url" id="url"/> <br />
+      Reason: <textarea name="reason" id="reason"></textarea> <br/>
+      <input type="submit" name="submit" label="Submit Request"/> <br />
+    </form>
+
+    <script>
+    // We're not mining bitcoins in your browser. We just couldn't get
+    // a better captcha to work here :(
+      $("form input[type=submit]").hashcash({
+        key: "83fef3b9-18ca-4fdd-9d61-039ba5ec9ceb"
+      });
+    </script>
+
+<strong>Warning</strong>: If you submit too many requests, we'll start ignoring you
+</html>
