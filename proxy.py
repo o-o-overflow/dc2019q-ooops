@@ -1,16 +1,35 @@
 #!/usr/bin/env python3
 
-from twisted.web import proxy, http
-from twisted.internet import reactor, ssl
-from twisted.python import log
 import sys
 import re
 import os
+import sqlite3
+import string
+from urllib.parse import unquote
+from twisted.web import proxy, http
+from twisted.internet import reactor, ssl
+from twisted.python import log
+
 log.startLogging(sys.stdout)
 
 PORT=7239
 PROXY_BASE = "/prox-internal/de5fs23hu73ds"
 
+# Setup database connection
+db_name = "database.sqlite"
+conn = sqlite3.connect(db_name)
+cur = conn.cursor()
+
+
+def update_db(user, url):
+    global cur
+    # Stupid approach to avoiding SQLi here
+    safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#")])
+    if len(safe_url):
+        q = "INSERT into requests VALUES ('{ip}', {ts}, '{url}', 0);".format(ip=user, ts="DateTime('now')", url=safe_url)
+        log.err("Inserting: {}".format(q))
+        conn.execute(q)
+        conn.commit()
 
 def html(text):
     return """<!doctype html>
@@ -110,28 +129,48 @@ class MyProxy(proxy.Proxy):
                 self.transport.loseConnection()
                 return
 
-            # Respond with raw file
-            if os.path.exists(local_file):
-                ctype ="text/html"
-                if "." in local_file:
-                    ext = local_file.split(".")[-1]
-                    if ext == "js": ctype = "script/javascript"
-                    if ext == "jpg": ctype = "image/jpeg"
+            if meth == "GET" or meth == "POST": # TODO: captcha validation
+                if meth == "POST":
+                    lines = data.decode("utf-8", "ignore").split("\r\n")
+                    url=None
+                    for line in lines:
+                        if "url=" in line and "reason=" in line: # Found it
+                            urldata = line.split("url=")[1]
+                            try:
+                                url=unquote(urldata.split("&")[0])
+                            except:
+                                print("Couldn't parse line: {}".format(urldata))
+                    if url:
+                        user = self.transport.getPeer()
+                        update_db(user.host, url)
+                    else:
+                        print("Warning: Couldn't parse requested url")
 
-                file_len = os.path.getsize(local_file)
-                self.transport.write("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\n".format(file_len, ctype).encode("utf-8"))
+                # Respond with raw file
+                if os.path.exists(local_file):
+                    ctype ="text/html"
+                    if "." in local_file:
+                        ext = local_file.split(".")[-1]
+                        if ext == "js": ctype = "script/javascript"
+                        if ext == "jpg": ctype = "image/jpeg"
 
-                self.setRawMode()
-                for _bytes in read_bytes_from_file(local_file):
-                    self.transport.write(_bytes)
+                    file_len = os.path.getsize(local_file)
+                    self.transport.write("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\n".format(file_len, ctype).encode("utf-8"))
 
-                self.transport.write(b"\r\\n")
-                self.setLineMode()
-                self.transport.loseConnection() # Not sure why this has to happen here
+                    self.setRawMode()
+                    for _bytes in read_bytes_from_file(local_file):
+                        self.transport.write(_bytes)
 
+                    self.transport.write(b"\r\\n")
+                    self.setLineMode()
+                    self.transport.loseConnection() # Not sure why this has to happen here
+
+                else:
+
+                    self.transport.write("HTTP/1.1 404 File not Found\r\n\r\nPage not found\r\n".encode("utf-8"))
+                    self.transport.loseConnection() # Not sure why this has to happen here
             else:
-
-                self.transport.write("HTTP/1.1 404 File not Found\r\n\r\nPage not found\r\n".encode("utf-8"))
+                self.transport.write("HTTP/1.1 405 Method not Allowed\r\n\r\nMethod not Allowed\r\n".encode("utf-8"))
                 self.transport.loseConnection() # Not sure why this has to happen here
 
         data = re.sub(b'Accept-Encoding: [a-z, ]*', b'Accept-Encoding: identity', data)
