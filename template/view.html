@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}OOPS &emdash; Evaluate Requests{% endblock %}
+
+{% block content %}
+
+{% if row %}
+<p>
+Request #{{row.rowid}} from {{row.ip}}.
+{% if row.visited %} Automatically evaluated {% else %} Not yet evaluated{% endif %}
+</p>
+
+<a class="btn btn-secondary btn-block btn-lg" href="{{row.url}}" target="_blank">
+Visit {{row.url}}
+</a>
+
+{% else %}
+Error. No result found
+{% endif %}
+
+
+{% endblock %}
