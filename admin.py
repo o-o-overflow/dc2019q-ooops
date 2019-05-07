@@ -27,18 +27,25 @@ db_name = "database.sqlite"
 ##########################
 
 
-
 FORMAT = '%(threadName)s: %(asctime)-10s %(message)s'
 #logging.basicConfig(filename='admin.log',level=logging.DEBUG,format=FORMAT)
 logging.basicConfig(level=logging.INFO,format=FORMAT)
 logger = logging.getLogger(__name__)
 
 #TODO request through proxy
-def do_request(driver, url, requested_by):
+# TODO: we're creating a new driver every time. Can we use a single driver per thread
+# and maybe just visit the actual referrer URL?
+def do_request(url, rid, requested_by):
     """ 
     Actually load a page. Returns bool indicating success
     """
     logger = logging.getLogger(__name__)
+
+    # To change the referrer URL we need to create a new driver every time :(
+    webdriver.DesiredCapabilities.PHANTOMJS['phantomjs.page.customHeaders.referrer'] = \
+        "http://proxy.localhost/admin/review/{}".format(rid)
+
+    driver = webdriver.PhantomJS()
 
     # Avoid potential issues with files
     if not url.lower().startswith("http://") and not url.lower().startswith("https://"):
@@ -48,13 +55,15 @@ def do_request(driver, url, requested_by):
     #s = time.time()
     logger.info("Loading {} requested by {}".format(url, requested_by))
     driver.set_page_load_timeout(TIMEOUT)
-    try:
+    try: # TODO: we could load the real admin page and then just click a link...
         driver.get(url)
     except TimeoutException:
+        del driver
         return False
 
     #e = time.time()
     #print("\t Request took {:f} seconds".format(e-s))
+    del driver
     return True
 
 def run_thread(thread_id):
@@ -64,10 +73,7 @@ def run_thread(thread_id):
     global db_name, REQ_PER_THREAD, TIMEOUT
     assert (thread_id > 3)
 
-    #cur.execute("PRAGMA synchronous = OFF")
-    #cur.execute("PRAGMA journal_mode = MEMORY")
-
-    driver = webdriver.PhantomJS()
+    #driver = webdriver.PhantomJS()
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
 
@@ -93,7 +99,7 @@ def run_thread(thread_id):
         successes = []
         errors = []
         for req in to_process:
-            if do_request(driver, req[3], req[1]):
+            if do_request(req[3], req[0], req[1]):
                 successes.append(req[0])
             else:
                 errors.append(req[0])
