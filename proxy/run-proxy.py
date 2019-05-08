@@ -14,7 +14,7 @@ log.startLogging(sys.stdout)
 
 # Configuration
 PORT=7239
-PROXY_BASE = "/ooops/de5fs23hu73ds"
+PROXY_BASE = "/ooops/d35fs23hu73ds"
 
 # URLs containing this are blocked
 BAD_WORD = "overflow"
@@ -23,6 +23,8 @@ BAD_WORD = "overflow"
 ALLOWED_PORTS = [80, 443, 5000]
 
 db_name = "../database.sqlite"
+
+HTTP_REGEX=b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d'
 
 # End configuration
 
@@ -46,6 +48,9 @@ def html(text):
 <html>
 {}
 </html>""".format(text)
+
+def err(code, msg):
+    return "HTTP/1.1 {code} {msg}\r\n\r\n{msg}\r\n".format(code=code, msg=msg).encode("utf-8")
 
 def blocked(url, port, path):
     global BAD_WORD, ALLOWED_PORTS
@@ -98,11 +103,13 @@ class MyProxy(proxy.Proxy):
         """
         Client has send us a request, try to connect to it
         """
+        global HTTP_REGEX
         try:
             return self._dataReceived(data)
         except Exception as e:
-            print(e)
+            print("Exception:" + str(e))
             self.transport.loseConnection()
+            raise e
             return False
 
 
@@ -115,11 +122,13 @@ class MyProxy(proxy.Proxy):
             self.transport.loseConnection()
             return False
 
-        method = re.search(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9%=\\\(\)])*)?)? HTTP\/\d.\d', data)
+        method = re.search(HTTP_REGEX, data)
 
         if not method or not method.groups(0) or not method.groups(1):
-            self.transport.write("Invalid request")
-            raise RuntimeError("Cannot understand request")
+            print("Malformed request")
+            self.transport.write(err(400, "Bad Request"))
+            self.transport.loseConnection()
+            return False
     
         meth  = method.groups(0)[0].decode("utf-8")
 
@@ -132,13 +141,18 @@ class MyProxy(proxy.Proxy):
         proto = method.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
         if not proto.startswith("http") or not proto.endswith("://"):
             print("Fail: bad proto")
+            self.transport.write(err(400, "Bad Request"))
             self.transport.loseConnection()
             return
 
-        url   = method.groups(0)[2].decode("utf-8") # Includes subdomains
+        url   = method.groups(0)[2].decode("utf-8", "ignore") # Includes subdomains
         port  = method.groups(0)[3] # Can be blank
-        path  = method.groups(1)[4].decode("utf-8")
-        query = method.groups(0)[6].decode("utf-8")
+        path  = method.groups(1)[4].decode("utf-8", "ignore")
+        query = method.groups(0)[6].decode("utf-8", "ignore")
+
+        user = self.transport.getPeer()
+        user_ip = user.host
+        log.err("Request from {}. URL: {}. Port: {}. Query: {}".format(user_ip, url, port, query))
 
         # Our headless browser is making a lot if these requests, just drop
         if url == "getpocket.cdn.mozilla.net":
@@ -147,9 +161,9 @@ class MyProxy(proxy.Proxy):
             return False
 
         if port:
-            port = int(port[1:]) # Trim leading :
+            port = int(port[1:]) # Trim leading ":"
         else:
-            port=80 # Defualt is 80
+            port=80 # Default is 80
 
         if query is not None: query = query[1:]
 
@@ -177,13 +191,12 @@ class MyProxy(proxy.Proxy):
                             except:
                                 print("Warning: Couldn't parse postdata line: {}".format(urldata))
                     if url:
-                        user = self.transport.getPeer()
-                        update_db(user.host, url)
+                        update_db(user_ip, url)
                     else:
                         print("Warning: Couldn't parse posted data url")
 
-                # Respond with raw file
-                if os.path.exists(local_file):
+                # Respond with raw file for get and post
+                if os.path.isfile(local_file): # Ignore directories
                     ctype ="text/html"
                     if "." in local_file:
                         ext = local_file.split(".")[-1]
@@ -200,14 +213,17 @@ class MyProxy(proxy.Proxy):
                     self.transport.write(b"\r\\n")
                     self.setLineMode()
                     self.transport.loseConnection()
+                    return False
 
                 else:
 
                     self.transport.write("HTTP/1.1 404 File not Found\r\n\r\nPage not found\r\n".encode("utf-8"))
                     self.transport.loseConnection()
+                    return False
             else:
                 self.transport.write("HTTP/1.1 405 Method not Allowed\r\n\r\nMethod not Allowed\r\n".encode("utf-8"))
                 self.transport.loseConnection()
+                return True
 
         data = re.sub(b'Accept-Encoding: [a-z, ]*', b'Accept-Encoding: identity', data)
         return proxy.Proxy.dataReceived(self, data)
