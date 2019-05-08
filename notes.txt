@@ -1,7 +1,7 @@
-Description:  TODO
-        The Overflow is confident that you can't break our SSL. To prove it, we're POSTing flags from our corporate network to oooverflow.io all day long.
-Download: info.pac
+Description: On our corporate network, the only overflow is the Order of the Overflow.
 Score: 300 points
+files: info.pac
+flag:  OOO{MuchCorporateSuchSecurity}
 
 1) Get obfscuated .pac file from challenge description which uses (TODO) load-balanced URL
 2) Deobfscuate to get credentials. Connect to proxy
@@ -14,7 +14,6 @@ Score: 300 points
 
 
 TODO:
-    Make grader use the proxy
     Captcha / proof of work
     Guard requests with Captcha, insert into DB when made
     Test it all
