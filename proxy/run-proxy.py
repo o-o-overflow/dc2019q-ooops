@@ -12,18 +12,28 @@ from twisted.python import log
 
 log.startLogging(sys.stdout)
 
+# Configuration
 PORT=7239
-PROXY_BASE = "/prox-internal/de5fs23hu73ds"
+PROXY_BASE = "/ooops/de5fs23hu73ds"
+
+# URLs containing this are blocked
+BAD_WORD = "overflow"
+
+# Ports other than these are blocked
+ALLOWED_PORTS = [80, 443, 5000]
+
+db_name = "../database.sqlite"
+
+# End configuration
 
 # Setup database connection
-db_name = "../database.sqlite"
 conn = sqlite3.connect(db_name)
 cur = conn.cursor()
 
 
 def update_db(user, url):
     global cur
-    # Stupid approach to avoiding SQLi here
+    # Whitelist allowed characters to avoid SQLi
     safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#=-_")])
     if len(safe_url):
         q = "INSERT into requests VALUES ('{ip}', {ts}, '{url}', 0);".format(ip=user, ts="DateTime('now')", url=safe_url)
@@ -37,12 +47,12 @@ def html(text):
 {}
 </html>""".format(text)
 
-def blocked(url, path):
-    if "overflow" in url and PROXY_BASE not in path: # Don't block internal pages, even on blocked sites
-        return True
+def blocked(url, port, path):
+    global BAD_WORD, ALLOWED_PORTS
+    if BAD_WORD in url or port not in ALLOWED_PORTS:
+        if PROXY_BASE not in path: # Don't block internal pages, even on blocked sites
+            return True
     return False
-
-LOCAL_HOSTS = ["127.0.0.1", "127.1", "localhost"] # Block non port 80 local connections
 
 def read_bytes_from_file(file, chunk_size = 2048):
     with open(file, 'rb') as file:
@@ -85,8 +95,20 @@ class MyProxy(proxy.Proxy):
 
 
     def dataReceived(self, data):
-        dec = data.decode("utf-8", "ignore")
-        print(dec)
+        """
+        Client has send us a request, try to connect to it
+        """
+        try:
+            return self._dataReceived(data)
+        except Exception as e:
+            print(e)
+            self.transport.loseConnection()
+            return False
+
+
+    def _dataReceived(self, data):
+        #dec = data.decode("utf-8", "ignore")
+        #print(dec)
 
         if not self.has_valid_creds(data):
             print("Invalid creds\n\n")
@@ -96,15 +118,16 @@ class MyProxy(proxy.Proxy):
         method = re.search(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9%=\\\(\)])*)?)? HTTP\/\d.\d', data)
 
         if not method or not method.groups(0) or not method.groups(1):
-            print(data.decode("utf-8").split("\r\n")[0])
-            raise RuntimeError("Could not extract a URL/Path - FIXME") # TODO needs work here
+            self.transport.write("Invalid request")
+            raise RuntimeError("Cannot understand request")
+    
         meth  = method.groups(0)[0].decode("utf-8")
 
         # Don't support HTTPS - TODO add support
         if meth == "CONNECT":
             print("Ignoring HTTPS connect")
             self.transport.loseConnection()
-            return
+            return False
 
         proto = method.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
         if not proto.startswith("http") or not proto.endswith("://"):
@@ -117,6 +140,12 @@ class MyProxy(proxy.Proxy):
         path  = method.groups(1)[4].decode("utf-8")
         query = method.groups(0)[6].decode("utf-8")
 
+        # Our headless browser is making a lot if these requests, just drop
+        if url == "getpocket.cdn.mozilla.net":
+            print("Dropping request to Firefox Pocket")
+            self.transport.loseConnection()
+            return False
+
         if port:
             port = int(port[1:]) # Trim leading :
         else:
@@ -124,12 +153,7 @@ class MyProxy(proxy.Proxy):
 
         if query is not None: query = query[1:]
 
-        if port not in [80, 443, 5000]: # Block non-standard ports (5000 for internal www)
-            print("Dropping connection to blocked port: {}".format(port))
-            self.transport.loseConnection()
-            return
-
-        if blocked(url, path): # Update path so we'll respond with internal file blocked.html
+        if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
             print("URL blocked, update path to...")
             path = PROXY_BASE + "/blocked.html"
             print(path)
@@ -141,8 +165,8 @@ class MyProxy(proxy.Proxy):
                 self.transport.loseConnection()
                 return
 
-            if meth == "GET" or meth == "POST": # TODO: captcha validation
-                if meth == "POST":
+            if meth == "GET" or meth == "POST": # Load page if exists on get or post
+                if meth == "POST": # For post, try parsing an unblock request
                     lines = data.decode("utf-8", "ignore").split("\r\n")
                     url=None
                     for line in lines:
@@ -151,12 +175,12 @@ class MyProxy(proxy.Proxy):
                             try:
                                 url=unquote(urldata.split("&")[0])
                             except:
-                                print("Couldn't parse line: {}".format(urldata))
+                                print("Warning: Couldn't parse postdata line: {}".format(urldata))
                     if url:
                         user = self.transport.getPeer()
                         update_db(user.host, url)
                     else:
-                        print("Warning: Couldn't parse requested url")
+                        print("Warning: Couldn't parse posted data url")
 
                 # Respond with raw file
                 if os.path.exists(local_file):
@@ -175,15 +199,15 @@ class MyProxy(proxy.Proxy):
 
                     self.transport.write(b"\r\\n")
                     self.setLineMode()
-                    self.transport.loseConnection() # Not sure why this has to happen here
+                    self.transport.loseConnection()
 
                 else:
 
                     self.transport.write("HTTP/1.1 404 File not Found\r\n\r\nPage not found\r\n".encode("utf-8"))
-                    self.transport.loseConnection() # Not sure why this has to happen here
+                    self.transport.loseConnection()
             else:
                 self.transport.write("HTTP/1.1 405 Method not Allowed\r\n\r\nMethod not Allowed\r\n".encode("utf-8"))
-                self.transport.loseConnection() # Not sure why this has to happen here
+                self.transport.loseConnection()
 
         data = re.sub(b'Accept-Encoding: [a-z, ]*', b'Accept-Encoding: identity', data)
         return proxy.Proxy.dataReceived(self, data)

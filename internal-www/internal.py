@@ -10,32 +10,11 @@ db_name = "../database.sqlite"
 # End configuration
 
 app = Flask(__name__, template_folder="template")
+db = sqlite3.connect(db_name+"?mode=ro", uri=True)
 
 def initialize_db():
 	global db_name
 	print("Initializing database...")
-	db = sqlite3.connect(db_name, uri=True)
-	db.row_factory = sqlite3.Row
-
-	# Create flag table with real flag
-	db.execute('CREATE TABLE flag (name TEXT, flag TEXT)')
-	db.execute('INSERT INTO flag VALUES ("OOOps", "OOO{MuchCorporateSuchSecurity}")')
-
-	# Create requests table
-	db.execute('CREATE TABLE requests (ip TEXT, ts datetime, url TEXT, visited integer)')
-
-	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=1", 0)')
-	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=2", 0)')
-	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=3", 0)')
-
-	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_1", 0)')
-	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_2", 0)')
-	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_3", 0)')
-
-
-
-	db.commit()
-	print("Database setup")
 
 
 def get_db():
@@ -60,6 +39,13 @@ def close_db(e=None):
 def is_local(ip):
 	return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
 
+# Home. Just so it's clear this is a website
+@app.route('/')
+def home():
+	if not is_local(request.remote_addr):
+		return render_template("error.html", msg="Only internal users may access this website")
+	return render_template("home.html")
+
 # Main page.
 # Exploitable with SQLi:
 # admin/view/0 union select 1,(select flag from flag),3,4,5
@@ -67,19 +53,19 @@ def is_local(ip):
 @app.route('/admin/view/<uid>')
 def view_request(uid):
 	if not is_local(request.remote_addr):
-		return render_template("error.html", msg="Only local users may access this website")
+		return render_template("error.html", msg="Only internal users may access this website")
 
 	con = get_db()
 	cur = con.cursor()
-	q = "select rowid,* from requests where rowid={};".format(uid)
+	q = "select rowid,* from requests where rowid={};".format(uid) # XXX: Exploitable :)
 	cur.execute(q)
 	row = cur.fetchone()
 	return render_template("view.html", row=row, q=q)
 
 @app.route('/css/bootstrap.min.css')
 def css():
-	if not is_local(request.remote_addr):
-		return render_template("error.html", msg="Only local users may access this website")
+	#if not is_local(request.remote_addr):
+	#	return render_template("error.html", msg="Only local users may access this website")
 	return send_file("css/bootstrap.min.css")
 
 # Remote users only get errors. Local users can see 404s for every other page
