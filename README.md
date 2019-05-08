@@ -10,7 +10,7 @@ Category: Web
 
 Author: fasano
 
-[public_files/info.pac](public_files/info.pac)
+Download: [public_files/info.pac](public_files/info.pac)
 
 
 # Private information
@@ -18,12 +18,12 @@ Author: fasano
 The premise of this challenge is to leverage a bug in a proxy server to get a universal cross-site scripting bug which can then be used to access and exploit a target that would otherwise be unreachable.
 
 ## Steps
-1. Deobfscuate provided .pac file
+1. Deobfscuate provided info.pac file
 2. Connect to proxy with credentials described in (de)obfscuated info.pac comments
 3. Identify that any website containing `overflow` in the URL is blocked through info.pac comment
 4. Explore proxy "blocked" pages. Identify they are served on all domains. Identify universal XSS
-5. Request unblocking of a website. View referrer link from internal server
-6. Try to connect to internal website, see "local connections only" error
+5. Request unblocking of a website. View referrer link to identify requests are coming from [internal www/](internal-www/)
+6. Try to connect to the internal website, see "local connections only" error
 7. Request unblocking of internal website with XSS, exfiltrate page contents. Observe obvious SQL query
 8. Request unblocking of internal website with XSS, with malformed URL. Observe SQL error and investigate (trivial) SQL injection
 9. Request unblocking of internal website with XSS and SQLi, identify flag table and structure
@@ -32,6 +32,7 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 
 ## Remaining TODOs
 - [ ] Move everything into docker container
+- [ ] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
 - [ ] Finalize infrastructure design for load-balanced URL / IP addresses
 - [ ] Add captcha/proof of work to unblock requests
 - [ ] (Optional) add HTTPS support to proxy
