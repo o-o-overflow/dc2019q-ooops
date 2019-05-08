@@ -26,7 +26,7 @@ TIMEOUT = 3
 NOTHING_WAIT = 5
 
 # Sqlite database path
-db_name = "database.sqlite"
+db_name = "../database.sqlite"
 
 # Proxy config
 service_args = [

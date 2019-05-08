@@ -16,7 +16,7 @@ PORT=7239
 PROXY_BASE = "/prox-internal/de5fs23hu73ds"
 
 # Setup database connection
-db_name = "database.sqlite"
+db_name = "../database.sqlite"
 conn = sqlite3.connect(db_name)
 cur = conn.cursor()
 
@@ -24,7 +24,7 @@ cur = conn.cursor()
 def update_db(user, url):
     global cur
     # Stupid approach to avoiding SQLi here
-    safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#")])
+    safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#=-_")])
     if len(safe_url):
         q = "INSERT into requests VALUES ('{ip}', {ts}, '{url}', 0);".format(ip=user, ts="DateTime('now')", url=safe_url)
         log.err("Inserting: {}".format(q))

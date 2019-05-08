@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
-PUBLIC_IP = "192.168.1.159"
-
 import sqlite3
 import os
 from flask import g, Flask, render_template, request, send_file
 
+# Configuration
+PUBLIC_IP = "192.168.1.159"
+db_name = "../database.sqlite"
+# End configuration
+
 app = Flask(__name__, template_folder="template")
-db_name = "database.sqlite"
 
 def initialize_db():
 	global db_name
