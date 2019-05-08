@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}OOPS &emdash; Evaluate Requests{% endblock %}
+{% block title %}OOPS &mdash; Evaluate Requests{% endblock %}
 
 {% block content %}
 
@@ -9,7 +9,7 @@ Request #{{row.rowid}} from {{row.ip}}.
 {% if row.visited %} Automatically evaluated {% else %} Not yet evaluated{% endif %}
 </p>
 
-<a class="btn btn-secondary btn-block btn-lg" href="{{row.url}}" target="_blank">
+<a id="lnk" class="btn btn-secondary btn-block btn-lg" href="{{row.url}}">
 Visit {{row.url}}
 </a>
 

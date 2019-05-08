@@ -5,18 +5,21 @@ import random
 import time
 import multiprocessing
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 ##### configuration ######
+# Internal IP/port to connect to internal-www
+INTERNAL="192.168.1.159:5000"
+
 # Number of threads
 NUM_THREADS = 10
 
 # Number of requests to process in each thread
 REQ_PER_THREAD = 10
 
-# Time to allow for each request
+# Time to allow for each request (note 2 requests per query)
 TIMEOUT = 3
 
 # Time to wait when there's nothing to do
@@ -24,6 +27,13 @@ NOTHING_WAIT = 5
 
 # Sqlite database path
 db_name = "database.sqlite"
+
+# Proxy config
+service_args = [
+    '--proxy=127.0.0.1:7239',
+    '--proxy-type=http',
+    '--proxy-auth=OnlyOne:Overflow'
+]
 ##########################
 
 
@@ -32,20 +42,19 @@ FORMAT = '%(threadName)s: %(asctime)-10s %(message)s'
 logging.basicConfig(level=logging.INFO,format=FORMAT)
 logger = logging.getLogger(__name__)
 
-#TODO request through proxy
-# TODO: we're creating a new driver every time. Can we use a single driver per thread
-# and maybe just visit the actual referrer URL?
-def do_request(url, rid, requested_by):
+def do_request(driver, rid, url):
     """ 
-    Actually load a page. Returns bool indicating success
+    Actually load a page via the admin page via the proxy
+    Returns bool indicating success
     """
-    logger = logging.getLogger(__name__)
+    global INTERNAL, TIMEOUT, logger
 
+    logger.debug("Start of do_request")
     # To change the referrer URL we need to create a new driver every time :(
-    webdriver.DesiredCapabilities.PHANTOMJS['phantomjs.page.customHeaders.referrer'] = \
-        "http://proxy.localhost/admin/review/{}".format(rid)
+    #webdriver.DesiredCapabilities.PHANTOMJS['phantomjs.page.customHeaders.referrer'] = \
+    #    "http://proxy.localhost/admin/review/{}".format(rid)
 
-    driver = webdriver.PhantomJS()
+    #driver = webdriver.PhantomJS()
 
     # Avoid potential issues with files
     if not url.lower().startswith("http://") and not url.lower().startswith("https://"):
@@ -53,27 +62,39 @@ def do_request(url, rid, requested_by):
         return False
 
     #s = time.time()
-    logger.info("Loading {} requested by {}".format(url, requested_by))
-    driver.set_page_load_timeout(TIMEOUT)
-    try: # TODO: we could load the real admin page and then just click a link...
-        driver.get(url)
+    #logger.info("Loading {} requested by {}".format(url, requested_by))
+    internal_url = "http:/{}/admin/view/{}".format(INTERNAL, rid)
+    logger.info("Loading {} indirectly via {}".format(url, internal_url))
+
+    # First load internal page which contains link (to set referrer)
+    try:
+        driver.get(internal_url)
     except TimeoutException:
-        del driver
+        logger.warning("Timeout")
         return False
+
+    try:
+        lnk = driver.find_element_by_id("lnk")
+    except WebDriverException as e:
+        logger.warning("Couldn't find lnk in page")
+        return False
+
+    lnk.click()
+    driver.implicitly_wait(TIMEOUT)
 
     #e = time.time()
     #print("\t Request took {:f} seconds".format(e-s))
-    del driver
     return True
 
 def run_thread(thread_id):
     """
     Each thread will manage the newest [REQ_PER_THREAD] requests, selecting a maximum of 1 per IP
     """
-    global db_name, REQ_PER_THREAD, TIMEOUT
+    global db_name, REQ_PER_THREAD, TIMEOUT, service_args
     assert (thread_id > 3)
 
-    #driver = webdriver.PhantomJS()
+    driver = webdriver.PhantomJS('/usr/bin/phantomjs', service_args=service_args)
+
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
 
@@ -91,7 +112,7 @@ def run_thread(thread_id):
         to_process = r2.fetchall()
 
         if not len(to_process):
-            logging.info("No requests to process...")
+            #logging.info("No requests to process...")
             time.sleep(NOTHING_WAIT)
 
         # For each selected request, try to fetch the page
@@ -99,7 +120,8 @@ def run_thread(thread_id):
         successes = []
         errors = []
         for req in to_process:
-            if do_request(req[3], req[0], req[1]):
+            #if do_request(req[3], req[0], req[1]):
+            if do_request(driver, req[0], req[3]):
                 successes.append(req[0])
             else:
                 errors.append(req[0])
@@ -110,7 +132,7 @@ def run_thread(thread_id):
             conn.commit()
 
         if len(errors):
-            q_e = "UPDATE requests set visited=2 where rowid in ({})".format(", ".join(map(str, successes)))
+            q_e = "UPDATE requests set visited=2 where rowid in ({})".format(", ".join(map(str, errors)))
             r_e = cur.execute(q_e)
             conn.commit()
 
@@ -133,8 +155,13 @@ conn.commit()
 """
 
 with ThreadPoolExecutor(max_workers=NUM_THREADS) as e:
+    futures = []
     for _ in range(NUM_THREADS):
         thread_id = random.randint(3, 2**31)
+        print("STARTING")
         logger.info("Starting thread with ID {}".format(thread_id))
-        e.submit(run_thread, thread_id)
+        futures.append(e.submit(run_thread, thread_id))
 
+    for future in as_completed(futures):
+        if future.exception():
+            raise future.exception()

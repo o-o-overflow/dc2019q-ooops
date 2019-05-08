@@ -42,7 +42,7 @@ def blocked(url, path):
         return True
     return False
 
-BAD_URLS = ["127.0.0.1", "127.1", "localhost"]
+LOCAL_HOSTS = ["127.0.0.1", "127.1", "localhost"] # Block non port 80 local connections
 
 def read_bytes_from_file(file, chunk_size = 2048):
     with open(file, 'rb') as file:
@@ -85,9 +85,15 @@ class MyProxy(proxy.Proxy):
 
 
     def dataReceived(self, data):
-        if not self.has_valid_creds(data): return False
+        dec = data.decode("utf-8", "ignore")
+        print(dec)
 
-        method = re.search(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z0-9%=\\\(\)])*)?)? HTTP\/\d.\d', data)
+        if not self.has_valid_creds(data):
+            print("Invalid creds\n\n")
+            self.transport.loseConnection()
+            return False
+
+        method = re.search(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9%=\\\(\)])*)?)? HTTP\/\d.\d', data)
 
         if not method or not method.groups(0) or not method.groups(1):
             print(data.decode("utf-8").split("\r\n")[0])
@@ -96,7 +102,7 @@ class MyProxy(proxy.Proxy):
 
         # Don't support HTTPS - TODO add support
         if meth == "CONNECT":
-            #print("Ignoring HTTPS connect")
+            print("Ignoring HTTPS connect")
             self.transport.loseConnection()
             return
 
@@ -111,9 +117,15 @@ class MyProxy(proxy.Proxy):
         path  = method.groups(1)[4].decode("utf-8")
         query = method.groups(0)[6].decode("utf-8")
 
+        if port:
+            port = int(port[1:]) # Trim leading :
+        else:
+            port=80 # Defualt is 80
+
         if query is not None: query = query[1:]
 
-        if url in BAD_URLS: # Block connecting to local ports? Not great, but it's something
+        if port not in [80, 443, 5000]: # Block non-standard ports (5000 for internal www)
+            print("Dropping connection to blocked port: {}".format(port))
             self.transport.loseConnection()
             return
 
@@ -178,9 +190,10 @@ class MyProxy(proxy.Proxy):
     
     def write(self, data):
         if data:
-            print("\nServer response:\n{}".format(data.decode("utf-8")))
+            #print("\nServer response:\n{}".format(data.decode("utf-8")))
             self.transport.write(data)
-        self.transport.loseConnection()
+        if self.transport:
+            self.transport.loseConnection()
 
 class ProxyFactory(http.HTTPFactory):
     protocol=MyProxy

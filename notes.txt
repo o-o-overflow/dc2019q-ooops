@@ -6,7 +6,7 @@ Score: 300 points
 1) Get obfscuated .pac file from challenge description which uses (TODO) load-balanced URL
 2) Deobfscuate to get credentials. Connect to proxy
 3) Identify proxy blocking (stack overflow hint?)
-4) Request unblocking of custom site -> see admin internal's referrer
+4) Request unblocking of custom site -> see admin internal's referrer (TODO)
 5) Explore blocked pages, identify xss
 6) Request unblock of xss'd admin internal page
 7) Exfil admin page
@@ -14,9 +14,15 @@ Score: 300 points
 
 
 TODO:
-    Sqlite DB
-    Load unblocked pages on request
-    Captcha
+    Make grader use the proxy
+    Captcha / proof of work
+    Guard requests with Captcha, insert into DB when made
+    Test it all
+
+    Optional:
+        HTTPs
+        Show images of visited pages?
+    Make it pretty
 
 Database:
     Flag
@@ -28,3 +34,19 @@ Database:
         ID      IP          URL                 Visited
         0       1.2.3.4     https://...         false
         1       ...
+
+hashcash.io stuff:
+83fef3b9-18ca-4fdd-9d61-039ba5ec9ceb
+PRIVATE-6e0cb711-68bd-4dc7-beb1-9b9baf217677
+
+    // TODO: check with hashcash API to validate
+    request 'https://hashcash.io/api/checkwork/' + $_REQUEST['hashcashid'] + '?apikey=[YOUR-PRIVATE-KEY]'
+    work  = json_decode(file_get_contents($url));
+    err = None
+    if (!work): err = "Please try again"
+    if (work->verified:  err = "This proof-of-work was already used"
+    if $work->totalDone < 0.01: err= "You did not wait long enough"
+    if not err:
+        print("OK")
+    else:
+        print(err)

@@ -1,4 +1,4 @@
 database.sqlite
-*.sq*
+.*.sw*
 cert/
 ghostdriver.log

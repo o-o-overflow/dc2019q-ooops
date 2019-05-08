@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
+PUBLIC_IP = "192.168.1.159"
+
 import sqlite3
 import os
-from flask import g, Flask, render_template, request
+from flask import g, Flask, render_template, request, send_file
 
 app = Flask(__name__, template_folder="template")
 db_name = "database.sqlite"
@@ -19,7 +21,17 @@ def initialize_db():
 
 	# Create requests table
 	db.execute('CREATE TABLE requests (ip TEXT, ts datetime, url TEXT, visited integer)')
-	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://localhost", 0)')
+
+	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=1", 0)')
+	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=2", 0)')
+	db.execute('INSERT INTO requests VALUES ("127.0.0.1", datetime("now"), "http://state.actor/log.php?v=3", 0)')
+
+	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_1", 0)')
+	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_2", 0)')
+	db.execute('INSERT INTO requests VALUES ("2.2.2.2", datetime("now"), "http://state.actor/log.php?v=2_3", 0)')
+
+
+
 	db.commit()
 	print("Database setup")
 
@@ -44,7 +56,7 @@ def close_db(e=None):
 
 
 def is_local(ip):
-	return ip == "127.0.0.1" or ip == "localhost"
+	return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
 
 # Main page.
 # Exploitable with SQLi:
@@ -57,10 +69,16 @@ def view_request(uid):
 
 	con = get_db()
 	cur = con.cursor()
-	q = "select rowid,* from requests where rowid={}".format(uid)
+	q = "select rowid,* from requests where rowid={};".format(uid)
 	cur.execute(q)
-	return render_template("view.html", row=cur.fetchone(), q=q)
+	row = cur.fetchone()
+	return render_template("view.html", row=row, q=q)
 
+@app.route('/css/bootstrap.min.css')
+def css():
+	if not is_local(request.remote_addr):
+		return render_template("error.html", msg="Only local users may access this website")
+	return send_file("css/bootstrap.min.css")
 
 # Remote users only get errors. Local users can see 404s for every other page
 @app.errorhandler(404)
@@ -70,6 +88,7 @@ def page_not_found(e):
 	return "Page not found", 404
 
 if __name__ == '__main__':
-	app.run(debug = True, host="0.0.0.0") # TODO: use a real server and turn off debug
+	app.run(debug = True, host=PUBLIC_IP) # TODO: use a real server and turn off debug
+	#app.run(debug = True) #TODO
 
 # vim: noet:ts=4:sw=4
