@@ -3,9 +3,13 @@ Order of the Overflow Proxy Service (OOPS):
 
 # Public information
 On our corporate network, the only overflow is the Order of the Overflow.
+
 Score: 350 or 400 points
+
 Category: Web
+
 Author: fasano
+
 [public_files/info.pac](public_files/info.pac)
 
 
