@@ -9,6 +9,7 @@ from urllib.parse import unquote
 from twisted.web import proxy, http
 from twisted.internet import reactor, ssl
 from twisted.python import log
+from base64 import b64encode
 
 log.startLogging(sys.stdout)
 
@@ -28,7 +29,7 @@ ALLOWED_PORTS = [80, 443, 5000]
 
 db_name = "../database.sqlite"
 
-HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
+HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=\'"\\ \(\),]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
 
 # End configuration
 
@@ -42,13 +43,11 @@ def is_local_user(ip):
 
 def update_db(user, url):
     global cur
-    # Whitelist allowed characters to avoid SQLi
-    safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#=-_")])
-    if len(safe_url):
-        q = "INSERT into requests VALUES ('{ip}', {ts}, '{url}', 0);".format(ip=user, ts="DateTime('now')", url=safe_url)
-        log.err("Inserting: {}".format(q))
-        conn.execute(q)
-        conn.commit()
+    # B64 encode data. Probably overkill?
+    q = "INSERT into requests VALUES (?, DateTime('now'), ?, 0);"
+    log.err("Inserting: {}".format(q))
+    conn.execute(q, (user, b64encode(url.encode("utf-8"))))
+    conn.commit()
 
 def html(text):
     return """<!doctype html>
@@ -167,7 +166,7 @@ class MyProxy(proxy.Proxy):
         # Our headless browser is making a lot if these requests, just drop
         """
         if url == "getpocket.cdn.mozilla.net":
-            log.debug("Dropping request to Firefox Pocket")
+            log.msg("Dropping request to Firefox Pocket")
             self.transport.loseConnection()
             return False
         """
@@ -180,7 +179,7 @@ class MyProxy(proxy.Proxy):
         if query is not None: query = query[1:]
 
         if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
-            log.debug("URL blocked")
+            log.msg("URL blocked")
             path = PROXY_BASE + "/blocked.html"
 
         path = os.path.abspath(path)

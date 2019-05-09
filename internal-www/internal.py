@@ -3,27 +3,18 @@
 import sqlite3
 import os
 from flask import g, Flask, render_template, request, send_file
+from base64 import b64decode
 
 # Configuration
 PUBLIC_IP = "192.168.1.159"
-db_name = "../database.sqlite"
+db_name = "file:///home/fasano/desktop/defcon-proxy/proxy/database.sqlite?mode=ro"
 # End configuration
 
 app = Flask(__name__, template_folder="template")
-db = sqlite3.connect(db_name+"?mode=ro", uri=True)
-
-def initialize_db():
-	global db_name
-	print("Initializing database...")
-
 
 def get_db():
 	global db_name
 	if 'db' not in g:
-		if not os.path.isfile(db_name): # initialize if necessary
-			initialize_db()
-		
-
 		# Now create a read-only handle for the rest of the app
 		g.db = sqlite3.connect(db_name, uri=True)
 		g.db.row_factory = sqlite3.Row
@@ -60,7 +51,13 @@ def view_request(uid):
 	q = "select rowid,* from requests where rowid={};".format(uid) # XXX: Exploitable :)
 	cur.execute(q)
 	row = cur.fetchone()
-	return render_template("view.html", row=row, q=q)
+	try:
+		url = b64decode(row["url"]).decode("utf-8")
+		print(url)
+	except Exception as e:
+		print(e)
+		url = "error"
+	return render_template("view.html", row=row, url=url, q=q)
 
 @app.route('/css/bootstrap.min.css')
 def css():

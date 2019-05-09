@@ -12,6 +12,8 @@ flag:  OOO{MuchCorporateSuchSecurity}
 7) Exfil admin page
 8) Exploit admin page
 
+Manually patched twisted's web/http.py on lines 1118, 1136
+
 
 TODO:
     Captcha / proof of work
