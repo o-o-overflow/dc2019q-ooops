@@ -31,8 +31,9 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 
 
 ## Remaining TODOs
+- [x] Write and validate end-to-end exploit
 - [ ] Move everything into docker container
-- [ ] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
+- [x] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
 - [ ] Finalize infrastructure design for load-balanced URL / IP addresses
 - [ ] Add captcha/proof of work to unblock requests
 - [ ] (Optional) add HTTPS support to proxy

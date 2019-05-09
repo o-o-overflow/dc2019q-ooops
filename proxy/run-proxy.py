@@ -9,12 +9,17 @@ from urllib.parse import unquote
 from twisted.web import proxy, http
 from twisted.internet import reactor, ssl
 from twisted.python import log
+from base64 import b64encode
 
 log.startLogging(sys.stdout)
 
 # Configuration
 PORT=7239
 PROXY_BASE = "/ooops/d35fs23hu73ds"
+
+# IP to allow passwordless connections from
+# because selenium can't handle proxies with passwords
+PUBLIC_IP="192.168.1.159"
 
 # URLs containing this are blocked
 BAD_WORD = "overflow"
@@ -24,7 +29,7 @@ ALLOWED_PORTS = [80, 443, 5000]
 
 db_name = "../database.sqlite"
 
-HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
+HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=\'"\\ \(\),]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
 
 # End configuration
 
@@ -32,16 +37,17 @@ HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\
 conn = sqlite3.connect(db_name)
 cur = conn.cursor()
 
+def is_local_user(ip):
+    return ip in["localhost", "127.0.0.1", PUBLIC_IP]
+
 
 def update_db(user, url):
     global cur
-    # Whitelist allowed characters to avoid SQLi
-    safe_url = "".join([c for c in url if c in (string.ascii_letters + string.digits + ":/?.#=-_")])
-    if len(safe_url):
-        q = "INSERT into requests VALUES ('{ip}', {ts}, '{url}', 0);".format(ip=user, ts="DateTime('now')", url=safe_url)
-        log.err("Inserting: {}".format(q))
-        conn.execute(q)
-        conn.commit()
+    # B64 encode data. Probably overkill?
+    q = "INSERT into requests VALUES (?, DateTime('now'), ?, 0);"
+    log.err("Inserting: {}".format(q))
+    conn.execute(q, (user, b64encode(url.encode("utf-8"))))
+    conn.commit()
 
 def html(text):
     return """<!doctype html>
@@ -85,16 +91,18 @@ class MyProxy(proxy.Proxy):
         data = data.decode("utf-8", "ignore")
         if "Proxy-Authorization: " not in data:
             self.request_creds()
+            print("Missing auth token")
             return False
         postauth = data.split("Proxy-Authorization: ")[1]
         if "\r\n" not in postauth:
-            #print("Malformed proxy auth")
+            print("Malformed proxy auth")
             return False
 
         auth_token = postauth.split("\n")[0].strip()
         if auth_token=="Basic T25seU9uZTpPdmVyZmxvdw==": # OnlyOne:Overflow
             return True
         else:
+            print("Wrong auth")
             self.request_creds()
             return False
 
@@ -116,8 +124,10 @@ class MyProxy(proxy.Proxy):
     def _dataReceived(self, data):
         #dec = data.decode("utf-8", "ignore")
         #print(dec)
+        user = self.transport.getPeer()
+        user_ip = user.host
 
-        if not self.has_valid_creds(data):
+        if not is_local_user(user_ip) and not self.has_valid_creds(data):
             #print("Invalid creds\n\n")
             self.transport.loseConnection()
             return False
@@ -151,15 +161,15 @@ class MyProxy(proxy.Proxy):
         path  = method.groups(1)[4].decode("utf-8", "ignore")
         query = method.groups(0)[6].decode("utf-8", "ignore")
 
-        user = self.transport.getPeer()
-        user_ip = user.host
-        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, path, port, query))
+        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, port, path, query))
 
         # Our headless browser is making a lot if these requests, just drop
+        """
         if url == "getpocket.cdn.mozilla.net":
-            log.debug("Dropping request to Firefox Pocket")
+            log.msg("Dropping request to Firefox Pocket")
             self.transport.loseConnection()
             return False
+        """
 
         if port:
             port = int(port[1:]) # Trim leading ":"
@@ -169,7 +179,7 @@ class MyProxy(proxy.Proxy):
         if query is not None: query = query[1:]
 
         if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
-            log.debug("URL blocked")
+            log.msg("URL blocked")
             path = PROXY_BASE + "/blocked.html"
 
         path = os.path.abspath(path)

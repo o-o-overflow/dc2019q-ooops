@@ -7,9 +7,12 @@ import multiprocessing
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from base64 import b64encode
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, UnexpectedAlertPresentException
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+from selenium.webdriver.common.proxy import Proxy, ProxyType
+from base64 import b64decode
+import os
+import sys
 
 ##### configuration ######
 # Public IP/port to connect to for internal-www
@@ -31,13 +34,8 @@ NOTHING_WAIT = 5
 db_name = "../database.sqlite"
 
 # Proxy config
-service_args = [
-    '--proxy=127.0.0.1:7239',
-    '--proxy-type=http',
-]
-# Proxy credentials
-proxy_creds = b"OnlyOne:Overflow"
-proxy_auth_token = "Basic " + b64encode(proxy_creds).decode("utf-8")
+PROXY_HOST="127.0.0.1"
+PROXY_PORT=7239
 ##########################
 
 
@@ -45,6 +43,23 @@ FORMAT = '%(threadName)s: %(asctime)-10s %(message)s'
 #logging.basicConfig(filename='admin.log',level=logging.DEBUG,format=FORMAT)
 logging.basicConfig(level=logging.INFO,format=FORMAT)
 logger = logging.getLogger(__name__)
+
+os.environ['MOZ_HEADLESS'] = '1'
+FF_BIN = FirefoxBinary('/usr/bin/firefox', log_file=sys.stdout)
+def make_ff_driver():
+        global PROXY_HOST, PROXY_PORT, FF_BIN
+        fp = webdriver.FirefoxProfile()
+        fp.set_preference("network.proxy.type", 1)
+        fp.set_preference("network.proxy.http",PROXY_HOST)
+        fp.set_preference("network.proxy.http_port",PROXY_PORT)
+        fp.set_preference("network.proxy.ssl",PROXY_HOST)
+        fp.set_preference("network.proxy.ssl_port",PROXY_PORT)
+        fp.set_preference("http.response.timeout", 5)
+        fp.set_preference("dom.max_script_run_time", 5)
+        fp.set_preference("network.http.connection-timeout", 10);
+        fp.set_preference("network.http.connection-retry-timeout", 10);
+        fp.update_preferences()
+        return webdriver.Firefox(firefox_profile=fp, firefox_binary=FF_BIN)
 
 def do_request(driver, rid, url):
     """ 
@@ -56,32 +71,46 @@ def do_request(driver, rid, url):
     logger.debug("Start of do_request")
 
     # Avoid potential issues with files
-    if not url.lower().startswith("http://") and not url.lower().startswith("https://"):
+    try:
+        dec_url = b64decode(url).decode("utf-8")
+    except Exception as e:
+        print(e)
+        return False
+
+    if not dec_url.lower().startswith("http://") and not dec_url.lower().startswith("https://"):
         logger.warn("Skipping request of malformed url {}".format(url))
         return False
 
     #s = time.time()
     #logger.info("Loading {} requested by {}".format(url, requested_by))
-    internal_url = "http:/{}/admin/view/{}".format(INTERNAL, rid)
-    logger.info("Loading {} indirectly via {}".format(url, internal_url))
+    internal_url = "http://{}/admin/view/{}".format(INTERNAL, rid)
+    logger.info("Loading {} indirectly via {}".format(dec_url, internal_url))
 
     # First load internal page which contains link (to set referrer)
-    #driver.set_page_load_timeout(TIMEOUT)
-    # TODO: doesn't timeout
+    # TODO: test timeouts
+    #print("Load internal: {}".format(internal_url))
+    driver.set_page_load_timeout(TIMEOUT)
     try:
         driver.get(internal_url)
     except TimeoutException:
         logger.warning("Timeout")
         return False
+    except UnexpectedAlertPresentException as e:
+        print("Saw alert: {}".format(e))
 
     try:
         lnk = driver.find_element_by_id("lnk")
-    except WebDriverException as e:
+    except NoSuchElementException:
         logger.warning("Couldn't find lnk in page: {}".format(driver.page_source))
         return False
 
-    lnk.click()
-    driver.implicitly_wait(TIMEOUT)
+    #print("Clicking link...")
+    try:
+        lnk.click()
+        driver.implicitly_wait(TIMEOUT)
+    except UnexpectedAlertPresentException as e:
+        print("Saw alert: {}".format(e))
+    #print(driver.page_source)
 
     #e = time.time()
     #print("\t Request took {:f} seconds".format(e-s))
@@ -95,12 +124,7 @@ def run_thread(thread_id):
     global db_name, REQ_PER_THREAD, TIMEOUT, service_args, proxy_auth_token
     assert (thread_id > 3)
 
-    caps = DesiredCapabilities.PHANTOMJS
-    caps['phantomjs.page.customHeaders.Proxy-Authorization'] = proxy_auth_token
-
-    driver = webdriver.PhantomJS('/usr/bin/phantomjs', service_args=service_args,
-                                    desired_capabilities=caps)
-
+    driver = make_ff_driver()
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     try:
@@ -141,7 +165,7 @@ def run_thread(thread_id):
                 r_e = cur.execute(q_e)
                 conn.commit()
     finally:
-        print("Shutting down PhantomJS")
+        print("Shutting down Headless FF")
         driver.quit()
 
 # DB has visited enum:

