@@ -24,7 +24,7 @@ ALLOWED_PORTS = [80, 443, 5000]
 
 db_name = "../database.sqlite"
 
-HTTP_REGEX=b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d'
+HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
 
 # End configuration
 
@@ -88,7 +88,7 @@ class MyProxy(proxy.Proxy):
             return False
         postauth = data.split("Proxy-Authorization: ")[1]
         if "\r\n" not in postauth:
-            print("Malformed proxy auth")
+            #print("Malformed proxy auth")
             return False
 
         auth_token = postauth.split("\n")[0].strip()
@@ -118,14 +118,15 @@ class MyProxy(proxy.Proxy):
         #print(dec)
 
         if not self.has_valid_creds(data):
-            print("Invalid creds\n\n")
+            #print("Invalid creds\n\n")
             self.transport.loseConnection()
             return False
 
-        method = re.search(HTTP_REGEX, data)
+        method = HTTP_REGEX.search(data)
 
         if not method or not method.groups(0) or not method.groups(1):
-            print("Malformed request")
+            #print("Malformed request")
+            #print(data)
             self.transport.write(err(400, "Bad Request"))
             self.transport.loseConnection()
             return False
@@ -134,7 +135,7 @@ class MyProxy(proxy.Proxy):
 
         # Don't support HTTPS - TODO add support
         if meth == "CONNECT":
-            print("Ignoring HTTPS connect")
+            #print("Ignoring HTTPS connect")
             self.transport.loseConnection()
             return False
 
@@ -152,11 +153,11 @@ class MyProxy(proxy.Proxy):
 
         user = self.transport.getPeer()
         user_ip = user.host
-        log.err("Request from {}. URL: {}. Port: {}. Query: {}".format(user_ip, url, port, query))
+        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, path, port, query))
 
         # Our headless browser is making a lot if these requests, just drop
         if url == "getpocket.cdn.mozilla.net":
-            print("Dropping request to Firefox Pocket")
+            log.debug("Dropping request to Firefox Pocket")
             self.transport.loseConnection()
             return False
 
@@ -168,9 +169,8 @@ class MyProxy(proxy.Proxy):
         if query is not None: query = query[1:]
 
         if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
-            print("URL blocked, update path to...")
+            log.debug("URL blocked")
             path = PROXY_BASE + "/blocked.html"
-            print(path)
 
         path = os.path.abspath(path)
         if path.startswith(PROXY_BASE):
