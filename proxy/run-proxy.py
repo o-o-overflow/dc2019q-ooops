@@ -16,6 +16,10 @@ log.startLogging(sys.stdout)
 PORT=7239
 PROXY_BASE = "/ooops/d35fs23hu73ds"
 
+# IP to allow passwordless connections from
+# because selenium can't handle proxies with passwords
+PUBLIC_IP="192.168.1.159"
+
 # URLs containing this are blocked
 BAD_WORD = "overflow"
 
@@ -31,6 +35,9 @@ HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\
 # Setup database connection
 conn = sqlite3.connect(db_name)
 cur = conn.cursor()
+
+def is_local_user(ip):
+    return ip in["localhost", "127.0.0.1", PUBLIC_IP]
 
 
 def update_db(user, url):
@@ -85,16 +92,18 @@ class MyProxy(proxy.Proxy):
         data = data.decode("utf-8", "ignore")
         if "Proxy-Authorization: " not in data:
             self.request_creds()
+            print("Missing auth token")
             return False
         postauth = data.split("Proxy-Authorization: ")[1]
         if "\r\n" not in postauth:
-            #print("Malformed proxy auth")
+            print("Malformed proxy auth")
             return False
 
         auth_token = postauth.split("\n")[0].strip()
         if auth_token=="Basic T25seU9uZTpPdmVyZmxvdw==": # OnlyOne:Overflow
             return True
         else:
+            print("Wrong auth")
             self.request_creds()
             return False
 
@@ -116,8 +125,10 @@ class MyProxy(proxy.Proxy):
     def _dataReceived(self, data):
         #dec = data.decode("utf-8", "ignore")
         #print(dec)
+        user = self.transport.getPeer()
+        user_ip = user.host
 
-        if not self.has_valid_creds(data):
+        if not is_local_user(user_ip) and not self.has_valid_creds(data):
             #print("Invalid creds\n\n")
             self.transport.loseConnection()
             return False
@@ -151,15 +162,15 @@ class MyProxy(proxy.Proxy):
         path  = method.groups(1)[4].decode("utf-8", "ignore")
         query = method.groups(0)[6].decode("utf-8", "ignore")
 
-        user = self.transport.getPeer()
-        user_ip = user.host
-        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, path, port, query))
+        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, port, path, query))
 
         # Our headless browser is making a lot if these requests, just drop
+        """
         if url == "getpocket.cdn.mozilla.net":
             log.debug("Dropping request to Firefox Pocket")
             self.transport.loseConnection()
             return False
+        """
 
         if port:
             port = int(port[1:]) # Trim leading ":"

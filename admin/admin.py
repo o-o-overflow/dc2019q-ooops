@@ -7,19 +7,21 @@ import multiprocessing
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from base64 import b64encode
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+from selenium.webdriver.common.proxy import Proxy, ProxyType
+import os
+import sys
 
 ##### configuration ######
 # Public IP/port to connect to for internal-www
 INTERNAL="192.168.1.159:5000"
 
 # Number of threads
-NUM_THREADS = 10
+NUM_THREADS = 1
 
 # Number of requests to process in each thread
-REQ_PER_THREAD = 10
+REQ_PER_THREAD = 1
 
 # Time to allow for each request (note 2 requests per query)
 TIMEOUT = 3
@@ -31,13 +33,8 @@ NOTHING_WAIT = 5
 db_name = "../database.sqlite"
 
 # Proxy config
-service_args = [
-    '--proxy=127.0.0.1:7239',
-    '--proxy-type=http',
-]
-# Proxy credentials
-proxy_creds = b"OnlyOne:Overflow"
-proxy_auth_token = "Basic " + b64encode(proxy_creds).decode("utf-8")
+PROXY_HOST="127.0.0.1"
+PROXY_PORT="7239"
 ##########################
 
 
@@ -45,6 +42,23 @@ FORMAT = '%(threadName)s: %(asctime)-10s %(message)s'
 #logging.basicConfig(filename='admin.log',level=logging.DEBUG,format=FORMAT)
 logging.basicConfig(level=logging.INFO,format=FORMAT)
 logger = logging.getLogger(__name__)
+
+os.environ['MOZ_HEADLESS'] = '1'
+FF_BIN = FirefoxBinary('/usr/bin/firefox', log_file=sys.stdout)
+def make_ff_driver():
+        global PROXY_HOST, PROXY_PORT, FF_BIN
+        fp = webdriver.FirefoxProfile()
+        fp.set_preference("network.proxy.type", 1)
+        fp.set_preference("network.proxy.http",PROXY_HOST)
+        fp.set_preference("network.proxy.http_port",PROXY_PORT)
+        fp.set_preference("network.proxy.ssl",PROXY_HOST)
+        fp.set_preference("network.proxy.ssl_port",PROXY_PORT)
+        fp.set_preference("http.response.timeout", 5)
+        fp.set_preference("dom.max_script_run_time", 5)
+        fp.setPreference("network.http.connection-timeout", 10);
+        fp.setPreference("network.http.connection-retry-timeout", 10);
+        fp.update_preferences()
+        return webdriver.Firefox(firefox_profile=fp, firefox_binary=FF_BIN)
 
 def do_request(driver, rid, url):
     """ 
@@ -66,20 +80,25 @@ def do_request(driver, rid, url):
     logger.info("Loading {} indirectly via {}".format(url, internal_url))
 
     # First load internal page which contains link (to set referrer)
-    #driver.set_page_load_timeout(TIMEOUT)
     # TODO: doesn't timeout
+    print("Load internal: {}".format(internal_url))
+    driver.set_page_load_timeout(TIMEOUT)
     try:
         driver.get(internal_url)
     except TimeoutException:
         logger.warning("Timeout")
         return False
 
+    print("Loaded. Search for link with {}".format(driver))
     try:
         lnk = driver.find_element_by_id("lnk")
-    except WebDriverException as e:
+        print("Found lnk")
+        print(driver.page_source)
+    except NoSuchElementException:
         logger.warning("Couldn't find lnk in page: {}".format(driver.page_source))
         return False
 
+    print("Clicking link...")
     lnk.click()
     driver.implicitly_wait(TIMEOUT)
 
@@ -95,12 +114,7 @@ def run_thread(thread_id):
     global db_name, REQ_PER_THREAD, TIMEOUT, service_args, proxy_auth_token
     assert (thread_id > 3)
 
-    caps = DesiredCapabilities.PHANTOMJS
-    caps['phantomjs.page.customHeaders.Proxy-Authorization'] = proxy_auth_token
-
-    driver = webdriver.PhantomJS('/usr/bin/phantomjs', service_args=service_args,
-                                    desired_capabilities=caps)
-
+    driver = make_ff_driver()
     conn = sqlite3.connect(db_name)
     cur = conn.cursor()
     try:
@@ -141,7 +155,7 @@ def run_thread(thread_id):
                 r_e = cur.execute(q_e)
                 conn.commit()
     finally:
-        print("Shutting down PhantomJS")
+        print("Shutting down Headless FF")
         driver.quit()
 
 # DB has visited enum:
