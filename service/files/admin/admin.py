@@ -10,19 +10,18 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, UnexpectedAlertPresentException
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 from selenium.webdriver.common.proxy import Proxy, ProxyType
-from base64 import b64decode
 import os
 import sys
 
 ##### configuration ######
 # Number of threads
-NUM_THREADS = 1
+NUM_THREADS = 10
 
 # Number of requests to process in each thread
-REQ_PER_THREAD = 1
+REQ_PER_THREAD = 10
 
 # Time to allow for each request (note 2 requests per query)
-TIMEOUT = 10 # TODO?
+TIMEOUT = 3
 
 # Time to wait when there's nothing to do
 NOTHING_WAIT = 5
@@ -63,11 +62,7 @@ def do_request(driver, rid, url):
     logger.debug("Start of do_request")
 
     # Avoid potential issues with files
-    try:
-        dec_url = b64decode(url).decode("utf-8")
-    except Exception as e:
-        print(e)
-        return False
+    dec_url = url.decode("ascii", "ignore")
 
     if not dec_url.lower().startswith("http://") and not dec_url.lower().startswith("https://"):
         logger.warn("Skipping request of malformed url {}".format(dec_url))

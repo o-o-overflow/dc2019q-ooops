@@ -3,7 +3,6 @@
 import sqlite3
 import os
 from flask import g, Flask, render_template, request, send_file
-from base64 import b64decode
 
 # Configuration
 DB_NAME = "file:///app/database.sqlite?mode=ro"
@@ -41,8 +40,9 @@ def is_local(request):
 			if not(is_local_ip(v)):
 				return False
 
-	# Without x-forwarded, just check IP directly
+	# Without x-forwarded, just check IP directly. Shouldn't really ever happen
 	ip = request.remote_addr
+	print("INTERNAL-WWW: WARNING- direct connection from {}".format(ip))
 	return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
 
 # Home. Just so it's clear this is a website
@@ -67,8 +67,7 @@ def view_request(uid):
 	cur.execute(q)
 	row = cur.fetchone()
 	try:
-		url = b64decode(row["url"]).decode("utf-8")
-		print(url)
+		url = row["url"].decode("ascii")
 	except Exception as e:
 		print(e)
 		url = "error"
@@ -85,6 +84,14 @@ def page_not_found(e):
 		return render_template("error.html", msg="Only local users may access this website")
 	return "Page not found", 404
 
+def gunicorn_start(*args, **kwargs):
+	# Entry point for gunicorn, pulls public ip from environment
+	global PUBLIC_IP
+	PUBLIC_IP = os.environ['CONTAINER_IP']
+	print("INTERNAL-WWW started with {}".format(PUBLIC_IP))
+	return app
+
+
 if __name__ == '__main__':
 	import sys
 	assert(len(sys.argv) == 3), "Usage: ./internal.py [Public IP] [Port]"
@@ -92,7 +99,10 @@ if __name__ == '__main__':
 	global PUBLIC_IP
 	PUBLIC_IP = sys.argv[1]
 
-	# TODO use a real webserver w/o debug
-	app.run(debug = True, host=PUBLIC_IP, port=int(sys.argv[2]))
+	# TODO use a real webserver? Won't have much traffic
+	#app.run(debug = True, host=PUBLIC_IP, port=int(sys.argv[2]))
+	app.run(debug = False, host=PUBLIC_IP, port=int(sys.argv[2]))
+
+
 
 # vim: noet:ts=4:sw=4

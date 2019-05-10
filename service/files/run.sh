@@ -6,7 +6,7 @@ if [ "$#" -ne 2 ]; then
   exit 1
 fi
 
-ADMIN_PORT=$1
+ADMIN_PORT=$1 # for internal-www interface, not the actual admin.py script
 PROXY_PORT=$2
 CONTAINER_IP=$(awk 'END{print $1}' /etc/hosts)
 
@@ -17,6 +17,8 @@ echo "Activate venv"
 
 echo "Start internal"
 /app/internal-www/internal.py $CONTAINER_IP $ADMIN_PORT &
+#cd /app/internal-www
+#gunicorn -b $CONTAINER_IP:$ADMIN_PORT --pythonpath=$(which python) internal-www:gunicorn_start
 
 echo "Start proxy"
 /app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &
