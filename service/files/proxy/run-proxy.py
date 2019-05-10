@@ -163,14 +163,14 @@ class FilterProxyRequest(proxy.ProxyRequest):
             captcha_id = self.args[b'captcha_id'][0].decode("ascii")
 
             # Skip captcha for testing ;)
-            bypass_captcha = self.args[b'captcha_guess']=b'fasanotesting'
+            bypass_captcha = self.args[b'captcha_guess'] == b'fasanotesting'
 
             if bypass_captcha or check_captcha(captcha_id, captcha_guess):
                 msg = "Request submitted"
                 url = self.args[b'url'][0].decode("ascii")
                 update_db(self.getClientIP().encode("ascii"), url)
             else:
-                msg = "Invalid captcha. <a href='{}'>Try again</a>".format(PROXY_BASE+"/blocked.html")
+                msg = "Invalid captcha. <a href='{}'>Try again</a>".format(PROXY_BASE+"/review.html")
 
         if os.path.isfile(local_file) and local_file.startswith(FILE_DIR):
             # If file exists in FILE_DIR, serve it
