@@ -23,7 +23,7 @@
     </form>
 
     <script>
-        document.getElementById("url").value = document.location;
+        document.getElementById("url").value = location.protocol + "//" + location.hostname + (location.port ? ':' + location.port: "");
     </script>
 
     <strong>Warning</strong>: If you submit too many requests, we'll start ignoring you

@@ -40,7 +40,8 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [ ] Debug issues building container with `./tester` (though manual building works)
 - [ ] Don't use sequential IDs on internal-www so teams can't steal exploits
 - [ ] Write automated end-to-end exploit for testing
-- [ ] Consider switching back to phantomJS for faster xss testing
+- [ ]  (Optional) Add more CSS to make everything look better
+- [x] Consider switching back to phantomJS for faster xss testing
 - [ ]  (Optional) Switch internal server to gunicorn or something more reliable for admin
 - [ ]  (Optional) finish adding HTTPS support to proxy
 

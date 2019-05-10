@@ -21,8 +21,8 @@ CAPTCHA_LEN = 5
 # TODO: These paths are for docker
 DB_NAME = "/app/database.sqlite"
 FILE_DIR = "/app/proxy/prox-internal"
-CERT_FILE = "/app/ca.crt"
-CERT_KEY = "/app/ca.key"
+CERT_FILE = "/app/cert/ca.crt"
+CERT_KEY = "/app/cert/ca.key"
 
 # And these paths are for local debugging
 #FILE_DIR = "prox-internal"
@@ -70,14 +70,15 @@ def update_db(user, url):
     global cur
     # B64 encode data. Probably overkill?
     q = "INSERT into requests VALUES (?, DateTime('now'), ?, 0);"
-    log.err("Inserting: {}".format(q))
+    log.err("Inserting: {} with values {} and {}".format(q, user, url.encode('ascii')))
     conn.execute(q, (user, url.encode("ascii")))
     conn.commit()
 
 def make_captcha(c_len=5):
     global imageCaptcha
-# Write [junk].png and [junk].txt where the txt contains the answer
-    captcha_chars = string.ascii_letters+string.digits
+    # Write [junk].png and [junk].txt where the txt contains the answer
+    #captcha_chars = string.ascii_letters+string.digits
+    captcha_chars = string.ascii_uppercase
     ans   = ''.join(choice(captcha_chars) for i in range(c_len))
     fname = ''.join(choice(captcha_chars) for i in range(c_len))
     ans_fname = fname+".txt"
@@ -92,7 +93,6 @@ def make_captcha(c_len=5):
 def check_captcha(imgname, guess):
     fname = os.path.abspath(os.path.join(FILE_DIR, 'captchas', imgname))
     ansname = fname.replace(".png", ".txt")
-    print(fname, ansname)
     if ".." in imgname or FILE_DIR not in fname:
         return False
 
@@ -134,10 +134,10 @@ class FilterProxyRequest(proxy.ProxyRequest):
 
     def has_valid_creds(self):
         global GRADER_IP
-        ip = self.getClientIP().encode('ascii')
+        ip = self.getClientIP()
         # Selenium can't handle proxy creds so just whitelist it by IP
         if ip in["localhost", "127.0.0.1", GRADER_IP]:
-            #log.msg("Request from grader/localhost. No creds required")
+            log.msg("Request from grader/localhost. No creds required")
             return True
 
         return self.getHeader("Proxy-Authorization") == \
@@ -168,12 +168,15 @@ class FilterProxyRequest(proxy.ProxyRequest):
             captcha_guess = self.args[b'captcha_guess'][0].decode("ascii")
             captcha_id = self.args[b'captcha_id'][0].decode("ascii")
 
-            if check_captcha(captcha_id, captcha_guess):
+            # Skip captcha for testing ;)
+            bypass_captcha = self.args[b'captcha_guess']=b'fasanotesting'
+
+            if bypass_captcha or check_captcha(captcha_id, captcha_guess):
                 msg = "Request submitted"
                 url = self.args[b'url'][0].decode("ascii")
                 update_db(self.getClientIP().encode("ascii"), url)
             else:
-                msg = "Invalid captcha"
+                msg = "Invalid captcha. <a href='{}'>Try again</a>".format(PROXY_BASE+"/blocked.html")
 
         if os.path.isfile(local_file) and local_file.startswith(FILE_DIR):
             # If file exists in FILE_DIR, serve it
@@ -187,7 +190,6 @@ class FilterProxyRequest(proxy.ProxyRequest):
             file_len = os.path.getsize(local_file)
             self.setResponseCode(200)
             self.setHeader("Content-Type", ctype.encode("ascii"))
-            self.setHeader("Content-Length", str(file_len).encode("ascii"))
 
             if ctype == "text/html": # Small file, safe to parse all at once
                 with open (local_file) as f:
@@ -201,9 +203,12 @@ class FilterProxyRequest(proxy.ProxyRequest):
                     if "{msg}" in _file_contents:
                         _file_contents = _file_contents.replace("{msg}", msg)
 
-                    self.write(_file_contents.encode("ascii"))
+                    ascii_contents = _file_contents.encode('ascii')
+                    self.setHeader("Content-Length", str(len(ascii_contents)))
+                    self.write(ascii_contents)
 
             else: # Binray, just send raw bytes
+                self.setHeader("Content-Length", str(file_len).encode("ascii"))
                 for _bytes in read_bytes_from_file(local_file):
                     self.write(_bytes)
 
@@ -254,6 +259,12 @@ class FilterProxyRequest(proxy.ProxyRequest):
         else:
             if self.isSecure():
                 headers = self.getAllHeaders().copy()
+                if "host" not in headers:
+                    self.setResponseCode(400)
+                    self.write("Malformed request\r\n".encode("ascii"))
+                    self.finish()
+                    return
+
                 host = headers["host"]
                 protocol = b"https"
                 doSSL = True

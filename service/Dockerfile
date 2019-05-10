@@ -1,19 +1,20 @@
 FROM ubuntu:18.04
 
 run echo "travis_fold:start:Dapt\033[33;1mservice Dockerfile apt\033[0m" && \
-    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv python3-setuptools wget sqlite3 && \
+    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv python3-setuptools wget sqlite3 gunicorn && \
     echo "\ntravis_fold:end:Dapt\r"
 
 # Install geckodriver
 RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.24.0/geckodriver-v0.24.0-linux64.tar.gz && tar xvf geckodriver-v0.24.0-linux64.tar.gz && mv geckodriver /usr/local/bin
 
 # Install phantomjs
-#RUN wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2 -O phantomjs.tar.bz2
-#RUN tar xvf phantomjs.tar.bz2
-#RUN cp phantomjs-2.1.1-linux-x86_64/bin/phantomjs /usr/bin/
-#RUN chmod ugo+x /usr/bin/phantomjs
+RUN wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2 -O phantomjs.tar.bz2 && \
+  tar xvf phantomjs.tar.bz2 && \
+  cp phantomjs-2.1.1-linux-x86_64/bin/phantomjs /usr/bin/ && \
+  chmod ugo+x /usr/bin/phantomjs && \
+  rm -rf phantomjs-2.1.1-linux-x86_64 phantomjs.tar.bz2
 
-# Setup users
+# Setup users (TODO, use the users)
 #   www runs public proxy
 #   internal-www runs internal-only website
 #   internal visits user provided urls
@@ -29,23 +30,6 @@ COPY files/requirements.txt /app/
 RUN python3 -m virtualenv --python=/usr/bin/python3 /app/venv
 RUN . /app/venv/bin/activate && pip install -r /app/requirements.txt
 
-# TODO: move up
-run apt-get install -qq gunicorn
-
-# Create table with flags 
-COPY files/db_init.sql /app/
-RUN sqlite3 /app/database.sqlite < /app/db_init.sql
-
-# Copy in each of the 3 applications
-RUN mkdir /app/admin
-COPY files/admin/ /app/admin/
-
-RUN mkdir /app/internal-www
-COPY files/internal-www/ /app/internal-www/
-
-RUN mkdir /app/proxy
-COPY files/proxy/ /app/proxy/
-
 # Copy in our start script
 COPY files/run.sh /app/
 
@@ -60,8 +44,24 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 expose $PROXY_PORT
 expose $ADMIN_WWW_PORT
 
-# Setup ssl certs into /app/ca.crt, and /app/ca.key
-RUN cd /app && ./proxy/cert/make_cert.sh
+# Setup ssl certs into /app/cert/ca.crt, and /app/cert/ca.key
+RUN mkdir /app/cert
+COPY files/cert/ /app/cert/
+RUN /app/cert/make_cert.sh
+
+# Create empty requests table and non-empty flag table
+COPY files/db_init.sql /app/
+RUN sqlite3 /app/database.sqlite < /app/db_init.sql
+
+# Copy in each of the 3 applications
+RUN mkdir /app/internal-www
+COPY files/internal-www/ /app/internal-www/
+
+RUN mkdir /app/proxy
+COPY files/proxy/ /app/proxy/
+
+RUN mkdir /app/admin
+COPY files/admin/ /app/admin/
 
 # Start script which runs all 3 components
 RUN chmod +x /app/run.sh
