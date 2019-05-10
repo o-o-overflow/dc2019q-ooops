@@ -14,6 +14,12 @@ Download: [public_files/info.pac](public_files/info.pac)
 
 
 # Private information
+## Running the container
+The tester script breaks with multiple ports. This service needs to expose 5000 and 8080
+```
+docker build -t dc2019q:ooops ./service && docker run -it --rm -p 8080:8080 -p5000:5000 dc2019q:ooops
+```
+
 ## Challenge Overview
 The premise of this challenge is to leverage a bug in a proxy server to get a universal cross-site scripting bug which can then be used to access and exploit a target that would otherwise be unreachable.
 
@@ -41,6 +47,6 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [ ] Stress test and update info.yaml with number of allowed connections
 - [x] Debug issues building container with `./tester` (though manual building works)
 - [x]  (Optional) Add more CSS to make everything look better
-- [ ]  (Optional) Switch internal server to gunicorn or something more reliable for admin
+- [x]  (Optional) Switch internal server to gunicorn or something more reliable for admin
 - [ ]  (Optional) finish adding HTTPS support to proxy
 

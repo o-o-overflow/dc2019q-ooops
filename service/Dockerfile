@@ -30,9 +30,6 @@ COPY files/requirements.txt /app/
 RUN python3 -m virtualenv --python=/usr/bin/python3 /app/venv
 RUN . /app/venv/bin/activate && pip install -r /app/requirements.txt
 
-# Copy in our start script
-COPY files/run.sh /app/
-
 # Parse arguments. proxy_port default 8080, admin_www_port default 5000
 ARG PROXY_PORT
 ENV PROXY_PORT ${PROXY_PORT:-8080}
@@ -43,6 +40,11 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 # Expose proxy port and admin_WWW (just to give a hint about local connections)
 expose $PROXY_PORT $ADMIN_WWW_PORT
 
+# Cron to cleanup unchecked captchas
+RUN apt-get install -qq cron
+ADD files/proxy/captcha_clean_cron /etc/cron.d/captcha_clean_cron
+RUN chmod 0644 /etc/cron.d/captcha_clean_cron
+
 # Setup ssl certs into /app/cert/ca.crt, and /app/cert/ca.key
 RUN mkdir /app/cert
 COPY files/cert/ /app/cert/
@@ -52,9 +54,15 @@ RUN /app/cert/make_cert.sh
 COPY files/db_init.sql /app/
 RUN sqlite3 /app/database.sqlite < /app/db_init.sql
 
+# Copy in our start script
+COPY files/run.sh /app/
+
+# TODO move into requirements
+RUN . /app/venv/bin/activate && pip install gunicorn
+
 # Copy in each of the 3 applications
-RUN mkdir /app/internal-www
-COPY files/internal-www/ /app/internal-www/
+RUN mkdir /app/internalwww
+COPY files/internalwww/ /app/internalwww/
 
 RUN mkdir /app/proxy
 COPY files/proxy/ /app/proxy/

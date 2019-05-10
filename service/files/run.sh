@@ -16,9 +16,9 @@ echo "Activate venv"
 . /app/venv/bin/activate
 
 echo "Start internal"
-/app/internal-www/internal.py $CONTAINER_IP $ADMIN_PORT &
-#cd /app/internal-www
-#gunicorn -b $CONTAINER_IP:$ADMIN_PORT --pythonpath=$(which python) internal-www:gunicorn_start
+#/app/internalwww/internal.py $CONTAINER_IP $ADMIN_PORT &
+cd /app/internalwww
+CONTAINER_IP=$CONTAINER_IP /app/venv/bin/gunicorn --workers=2 -b $CONTAINER_IP:$ADMIN_PORT internalwww:app &
 
 echo "Start proxy"
 /app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &

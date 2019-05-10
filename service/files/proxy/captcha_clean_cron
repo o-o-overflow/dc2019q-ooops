@@ -1,0 +1,1 @@
+  */5 * * * * rm /app/proxy/prox-internal/captchas/*.{png,txt}

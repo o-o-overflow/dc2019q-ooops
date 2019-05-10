@@ -82,13 +82,6 @@ def page_not_found(e):
 		return render_template("error.html", msg="Only local users may access this website")
 	return "Page not found", 404
 
-def gunicorn_start(*args, **kwargs):
-	# Entry point for gunicorn, pulls public ip from environment
-	global PUBLIC_IP
-	PUBLIC_IP = os.environ['CONTAINER_IP']
-	print("INTERNAL-WWW started with {}".format(PUBLIC_IP))
-	return app
-
 
 if __name__ == '__main__':
 	import sys
@@ -100,7 +93,12 @@ if __name__ == '__main__':
 	# TODO use a real webserver? Won't have much traffic
 	#app.run(debug = True, host=PUBLIC_IP, port=int(sys.argv[2]))
 	app.run(debug = False, host=PUBLIC_IP, port=int(sys.argv[2]))
-
+else:
+	# Normal load
+	if 'CONTAINER_IP' not in os.environ:
+		raise RuntimeError("CONTAINER IP is not present in environment")
+	PUBLIC_IP = os.environ['CONTAINER_IP']
+	print("INTERNAL-WWW started with {}".format(PUBLIC_IP))
 
 
 # vim: noet:ts=4:sw=4

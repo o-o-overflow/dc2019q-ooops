@@ -1,0 +1,18 @@
+#blocked {
+  font-size:2em;
+  min-height:1em;
+  width:900px;
+  marign: 0 auto;
+  clear:both;
+  border: 3px dotted black;
+  text-align: center
+}
+
+#logo {
+  display: block;
+  margin: 0 auto;
+}
+
+.captcha {
+  border: 1px solid black;
+}
