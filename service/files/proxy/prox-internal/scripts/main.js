@@ -3,7 +3,7 @@ function split_url(u) {
 	output = u[0];
 	for (i=1;i<u.length;i++) {
 		output += u[i]
-		if (i%40==0) output+= "<br/>";
+		if (i%55==0) output+= "<br/>";
 	}
 	console.log(output)
 	return output

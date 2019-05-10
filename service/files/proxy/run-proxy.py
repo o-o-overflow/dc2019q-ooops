@@ -134,12 +134,6 @@ class FilterProxyRequest(proxy.ProxyRequest):
 
     def has_valid_creds(self):
         global GRADER_IP
-        ip = self.getClientIP()
-        # Selenium can't handle proxy creds so just whitelist it by IP
-        if ip in["localhost", "127.0.0.1", GRADER_IP]:
-            log.msg("Request from grader/localhost. No creds required")
-            return True
-
         return self.getHeader("Proxy-Authorization") == \
                 "Basic T25seU9uZTpPdmVyZmxvdw==" # OnlyOne:Overflow
 

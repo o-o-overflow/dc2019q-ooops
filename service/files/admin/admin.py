@@ -52,8 +52,6 @@ def do_request(driver, rid, url):
     """
     global INTERNAL, TIMEOUT, logger
 
-    logger.info("Start of do_request")
-
     # Avoid potential issues with files
     dec_url = url.decode("ascii", "ignore")
 
