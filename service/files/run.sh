@@ -15,15 +15,17 @@ echo "Started with AP=$ADMIN_PORT, PP=$PROXY_PORT, CIP=$CONTAINER_IP"
 echo "Activate venv"
 . /app/venv/bin/activate
 
-echo "Start internal"
-#/app/internalwww/internal.py $CONTAINER_IP $ADMIN_PORT &
+echo "Start internal" # TODO: run as internalwww?
 cd /app/internalwww
 CONTAINER_IP=$CONTAINER_IP /app/venv/bin/gunicorn --workers=2 -b $CONTAINER_IP:$ADMIN_PORT internalwww:app &
+cd /
 
 echo "Start proxy"
-/app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &
+#sudo -su www /app/venv/bin/python /app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &
+/app/venv/bin/python /app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &
 
 echo "Start 3 admin processes"
+#sudo -su internal /app/venv/bin/python /app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
 /app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
 /app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
 /app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT

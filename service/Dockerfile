@@ -1,7 +1,7 @@
 FROM ubuntu:18.04
 
 run echo "travis_fold:start:Dapt\033[33;1mservice Dockerfile apt\033[0m" && \
-    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv python3-setuptools wget sqlite3 gunicorn && \
+    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv python3-setuptools wget sqlite3 && \
     echo "\ntravis_fold:end:Dapt\r"
 
 # Install geckodriver
@@ -19,7 +19,7 @@ RUN wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x
 #   internal-www runs internal-only website
 #   internal visits user provided urls
 RUN useradd www
-RUN useradd internal-www
+RUN useradd internalwww
 RUN useradd internal
 
 # Build root directory for our files
@@ -40,8 +40,8 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 # Expose proxy port and admin_WWW (just to give a hint about local connections)
 expose $PROXY_PORT $ADMIN_WWW_PORT
 
-# Cron to cleanup unchecked captchas
-RUN apt-get install -qq cron
+# Cron to cleanup unchecked captchas (TODO move up)
+RUN apt-get install -qq cron sudo
 ADD files/proxy/captcha_clean_cron /etc/cron.d/captcha_clean_cron
 RUN chmod 0644 /etc/cron.d/captcha_clean_cron
 
@@ -54,11 +54,16 @@ RUN /app/cert/make_cert.sh
 COPY files/db_init.sql /app/
 RUN sqlite3 /app/database.sqlite < /app/db_init.sql
 
+# Only www and internal can write. internalwww can only read
+#RUN groupadd db_writers
+#RUN usermod -a -G db_writers www
+#RUN usermod -a -G db_writers internal
+#RUN chown root:db_writers /app/database.sqlite
+#RUN chmod 774 /app/database.sqlite
+#RUN chmod 777 /app/database.sqlite
+
 # Copy in our start script
 COPY files/run.sh /app/
-
-# TODO move into requirements
-RUN . /app/venv/bin/activate && pip install gunicorn
 
 # Copy in each of the 3 applications
 RUN mkdir /app/internalwww
@@ -69,6 +74,12 @@ COPY files/proxy/ /app/proxy/
 
 RUN mkdir /app/admin
 COPY files/admin/ /app/admin/
+
+RUN chown -R www /app/proxy
+RUN chown -R internalwww /app/internalwww
+RUN chown -R internal /app/admin
+
+RUN touch ghostdriver.log && chmod 777 ghostdriver.log
 
 # Start script which runs all 3 components
 RUN chmod +x /app/run.sh
