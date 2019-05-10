@@ -3,54 +3,22 @@
 from twisted.web import proxy, http
 import sys
 from twisted.python import log
+from twisted.python.compat import urllib_parse, urlquote
 
 PROXY_PORT = 8090
 
-class FilterProxyClient(proxy.ProxyClient):
-    def handleHeader(self, key, value):
-        print("Handle response header {}={}".format(key, value))
-        proxy.ProxyClient.handleHeader(self, key, value)
-
-    """
-    def handleResponsePart(self, data):
-        proxy.ProxyClient.handleResponsePart(self, data)
-
-    def handleResponseEnd(self):
-        proxy.ProxyClient.handleResponseEnd(self)
-    """
-
-class FilterProxyFactory(proxy.ProxyClientFactory):
-    def buildProtocol(self, addr):
-        client = proxy.ProxyClientFactory.buildProtocol(self, addr)
-        # upgrade proxy.proxyClient object to FilterProxyClient
-        client.__class__ = FilterProxyClient
-        return client
-
 class FilterProxyRequest(proxy.ProxyRequest):
-    protocols = {b'http': FilterProxyFactory}
-    # How is this different from a self.protocols= after init?
+    # Called when we get a request from a client
 
-    def __init__(self,*args):
-        super(FilterProxyRequest, self).__init__(*args)
-
-    """
+    # Overload process for bugfixes AND to intercept request
+    # For https see https://twistedmatrix.com/pipermail/twisted-python/2008-August/018227.html
     def process(self):
-        try:
-            proxy.ProxyRequest.process(self)
-            print("Request for: {}".format(self.host))
-        except KeyError: # Unsupported protocols
-            # TODO: send a message back to the browser
-            return None
-    """
-
-    def process(self):
-        from twisted.python.compat import urllib_parse, urlquote
         parsed = urllib_parse.urlparse(self.uri)
         protocol = parsed[0]
         host = parsed[1].decode('ascii')
         if protocol not in self.ports:
-            if protocol != b'':
-                print("TODO: ERROR, unknown port: {}".format(protocol))
+            self.write("Unsupported protocol\r\n".encode("ascii"))
+            self.finish()
             return None
 
         port = self.ports[protocol]
@@ -61,10 +29,11 @@ class FilterProxyRequest(proxy.ProxyRequest):
         if not rest:
             rest = rest + b'/'
         if protocol not in self.protocols:
-            print("TODO: error, unknown protocol")
+            self.write("Unsupported protocol\r\n".encode("ascii"))
+            self.finish()
             return None
+
         class_ = self.protocols[protocol]
-        #class_ = FilterProxyFactory
         headers = self.getAllHeaders().copy()
         if b'host' not in headers:
             headers[b'host'] = host.encode('ascii')
@@ -77,23 +46,20 @@ class FilterProxyRequest(proxy.ProxyRequest):
         clientFactory = class_(self.method, rest, self.clientproto, headers,
                                s, self)
 
-        print("About to connect upstream to {}:{}".format(host, port))
-        print("Headers for upstream: {}".format(headers))
-        self.reactor.connectTCP(host, port, clientFactory)
+        #print("About to connect upstream to {}:{}".format(host, port))
+        #print("Headers for upstream: {}".format(headers))
+
+        if "overflow" not in host: # Unblocked, behave as normal
+            self.reactor.connectTCP(host, port, clientFactory)
+        else: #Blocked
+            self.write("HTTP/1.1 200 OK\r\n\r\nBleh\r\n".encode("utf-8"))
+            self.finish()
 
 class FilterProxy(proxy.Proxy):
-    def __init__(self):
-        super(FilterProxy, self).__init__()
-
     def requestFactory(self, *args):
         return FilterProxyRequest(*args)
 
 class FilterProxyFactory(http.HTTPFactory):
-    def __init__(self, *args, **kwargs):
-    #self, logPath=None, timeout=60 * 60 * 12
-        super(FilterProxyFactory, self).__init__()
-        #http.HTTPFactory.__init__(self)
-
     def buildProtocol(self, addr):
         protocol = FilterProxy()
         return protocol
