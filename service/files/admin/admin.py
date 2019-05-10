@@ -134,7 +134,6 @@ def run_thread(thread_id):
             to_process = r2.fetchall()
 
             if not len(to_process):
-                logging.info("No requests to process...")
                 time.sleep(NOTHING_WAIT)
 
             # For each selected request, try to fetch the page

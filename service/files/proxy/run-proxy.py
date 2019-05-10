@@ -117,75 +117,79 @@ class MyProxy(proxy.Proxy):
 
 
     def _dataReceived(self, data):
-        #dec = data.decode("utf-8", "ignore")
-        #print(dec)
         user = self.transport.getPeer()
         user_ip = user.host
 
+        # Require authentication (unless it's the grader)
         if not is_local_user(user_ip) and not self.has_valid_creds(data):
             #print("Invalid creds\n\n")
             self.transport.loseConnection()
             return False
 
-        method = HTTP_REGEX.search(data)
-
-        if not method or not method.groups(0) or not method.groups(1):
+        # Ensure we can parse the first line of the HTTP request or drop the connection
+        http_line_match = HTTP_REGEX.search(data)
+        if not http_line_match or not http_line_match.groups(0) or not http_line_match.groups(1):
             #print("Malformed request")
             #print(data)
             self.transport.write(err(400, "Bad Request"))
             self.transport.loseConnection()
             return False
-    
-        meth  = method.groups(0)[0].decode("utf-8")
 
-        # Don't support HTTPS - TODO add support
-        if meth == "CONNECT":
+
+        # Get method and check if it's https (CONNECT)
+        method  = http_line_match.groups(0)[0].decode("utf-8")
+        # We don't support HTTPS
+        if method == "CONNECT":
             #print("Ignoring HTTPS connect")
+            self.transport.write(err(405, "Method Not Allowed"))
             self.transport.loseConnection()
             return False
 
-        proto = method.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
+        # Extract and validate protocol
+        proto = http_line_match.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
         if not proto.startswith("http") or not proto.endswith("://"):
-            print("Fail: bad proto")
+            #print("Fail: bad proto")
             self.transport.write(err(400, "Bad Request"))
             self.transport.loseConnection()
             return
 
-        url   = method.groups(0)[2].decode("utf-8", "ignore") # Includes subdomains
-        port  = method.groups(0)[3] # Can be blank
-        path  = method.groups(1)[4].decode("utf-8", "ignore")
-        query = method.groups(0)[6].decode("utf-8", "ignore")
+        # Capture 
+        url   = http_line_match.groups(0)[2].decode("utf-8", "ignore") # Includes subdomains
+        port  = http_line_match.groups(0)[3] # Can be blank
+        path  = http_line_match.groups(1)[4].decode("utf-8", "ignore")
+        query = http_line_match.groups(0)[6].decode("utf-8", "ignore")
 
-        log.err("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, port, path, query))
-
-        # Our headless browser is making a lot if these requests, just drop
-        """
-        if url == "getpocket.cdn.mozilla.net":
-            log.msg("Dropping request to Firefox Pocket")
+        # Validate and reformat port
+        try:
+            port = int(port[1:]) if port else 80 # Trim leading : if specified, otherwise default to 80
+        except ValueError:
+            log.err("Invalid port")
             self.transport.loseConnection()
             return False
-        """
 
-        if port:
-            port = int(port[1:]) # Trim leading ":"
-        else:
-            port=80 # Default is 80
-
+        # Reformat query
         if query is not None: query = query[1:]
 
+        log.msg("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, port, path, query))
+
+        # Check if request should be blocked, update path if it is
         if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
             log.msg("URL blocked")
             path = PROXY_BASE + "/blocked.html"
 
+        # Transform path to simplify any weird directories
         path = os.path.abspath(path)
+
         if path.startswith(PROXY_BASE):
             local_file = "/app/proxy/prox-internal" + path.split(PROXY_BASE)[1] # Skip past proxy base
+            """ # Note if it starts with prox-internal after abspath, it can't traverse any higher
             if ".." in local_file: 
                 self.transport.loseConnection()
-                return
+                return False
+            """
 
-            if meth == "GET" or meth == "POST": # Load page if exists on get or post
-                if meth == "POST": # For post, try parsing an unblock request
+            if method == "GET" or method == "POST": # Load page if exists on get or post
+                if method == "POST": # For post, try parsing an unblock request
                     lines = data.decode("utf-8", "ignore").split("\r\n")
                     url=None
                     for line in lines:
@@ -230,7 +234,25 @@ class MyProxy(proxy.Proxy):
                 self.transport.loseConnection()
                 return True
 
+        # Require host: header
+
+        """
+        dec_req = data[:min(100, len(data))].decode("utf-8", "ignore")
+        if "\r\nHost: " not in dec_req:
+            self.transport.write(err(400, "Bad Request"))
+            self.transport.loseConnection()
+            return False
+        """
+
+        # We only accept encoding identiy to make our lives easier
         data = re.sub(b'Accept-Encoding: [a-z, ]*', b'Accept-Encoding: identity', data)
+
+        # Add x-forward-for header by replacing host header?
+        #xforfor_host = ("X-Forwarded-For: {}\r\nHost: ".format(user_ip)).encode("utf-8")
+        #data = re.sub(b'Host:', xforfor_host, data)
+
+
+
         return proxy.Proxy.dataReceived(self, data)
     
     def write(self, data):
