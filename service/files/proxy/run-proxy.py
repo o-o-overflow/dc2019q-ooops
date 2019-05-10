@@ -10,7 +10,7 @@ from twisted.python.compat import urllib_parse, urlquote
 # CONFIG
 BAD_WORD = "overflow"
 DB_NAME = "/app/database.sqlite"
-FILE_DIR = "./prox-internal"
+FILE_DIR = "/app/proxy/prox-internal"
 PROXY_BASE = "/ooops/d35fs23hu73ds"
 # end config
 
@@ -19,10 +19,14 @@ conn = sqlite3.connect(DB_NAME)
 cur = conn.cursor()
 
 def full_path_to_file(path):
-    print(path)
-    no_proto = path.split("://")[1]
-    path_only = no_proto[no_proto.index("/"):]
-    path_only = os.path.abspath(path_only)
+    if "://" in path:
+        path = path.split("://")[1]
+    if "/" in path:
+        path_only = path[path.index("/"):] # Trim after first /
+        path_only = os.path.abspath(path_only)
+    else:
+        path_only = "/"
+
     return path_only
 
 def is_internal_page(path):
@@ -58,7 +62,9 @@ class FilterProxyRequest(proxy.ProxyRequest):
         global GRADER_IP
         ip = self.getClientIP().encode('ascii')
         # Selenium can't handle proxy creds so just whitelist it by IP
-        if ip in["localhost", "127.0.0.1", GRADER_IP]: return True
+        if ip in["localhost", "127.0.0.1", GRADER_IP]:
+            #log.msg("Request from grader/localhost. No creds required")
+            return True
 
         return self.getHeader("Proxy-Authorization") == \
                 "Basic T25seU9uZTpPdmVyZmxvdw==" # OnlyOne:Overflow
@@ -68,8 +74,6 @@ class FilterProxyRequest(proxy.ProxyRequest):
         self.setHeader("Proxy-Authenticate", "Basic realm=\"Access to proxy site".encode("ascii"))
         self.write("Auth required".encode("ascii"))
         self.finish()
-
-
 
 
     def serve_internal(self, path):
