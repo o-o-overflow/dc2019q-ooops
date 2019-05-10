@@ -36,6 +36,13 @@ RUN . /app/venv/bin/activate && pip install -r /app/requirements.txt
 RUN apt-get install -qq wget
 RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.24.0/geckodriver-v0.24.0-linux64.tar.gz && tar xvf geckodriver-v0.24.0-linux64.tar.gz && mv geckodriver /usr/local/bin
 
+# Create table with flags  TODO merge
+RUN apt-get install -qq sqlite3
+
+# Create table with flags 
+COPY files/db_init.sql /app/
+RUN sqlite3 /app/database.sqlite < /app/db_init.sql
+
 # Copy in each of the 3 components
 RUN mkdir /app/admin
 COPY files/admin/ /app/admin/
@@ -58,14 +65,9 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 
 # Ports
 expose $PROXY_PORT
+#TODO: Nope. Nobody gets to see this except containers
 expose $ADMIN_WWW_PORT
 
-# Create table with flags
-RUN apt-get install -qq sqlite3
-
-COPY files/db_init.sql /app/
-RUN sqlite3 /app/database.sqlite < /app/db_init.sql
-RUN rm /app/db_init.sql
 
 # Start script which runs all 3 components (TODO: arg of public IP?)
 RUN chmod +x /app/run.sh

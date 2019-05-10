@@ -16,46 +16,42 @@ import sys
 
 ##### configuration ######
 # Number of threads
-NUM_THREADS = 10
+NUM_THREADS = 1
 
 # Number of requests to process in each thread
-REQ_PER_THREAD = 10
+REQ_PER_THREAD = 1
 
 # Time to allow for each request (note 2 requests per query)
-TIMEOUT = 3
+TIMEOUT = 10 # TODO?
 
 # Time to wait when there's nothing to do
 NOTHING_WAIT = 5
 
 # Sqlite database path
-db_name = "../database.sqlite"
-
-# Proxy config
-PROXY_HOST="127.0.0.1"
+db_name = "/app/database.sqlite"
 ##########################
 
 
-FORMAT = '%(threadName)s: %(asctime)-10s %(message)s'
-#logging.basicConfig(filename='admin.log',level=logging.DEBUG,format=FORMAT)
+FORMAT = 'ADMIN: %(threadName)s: %(asctime)-10s %(message)s'
 logging.basicConfig(level=logging.INFO,format=FORMAT)
 logger = logging.getLogger(__name__)
 
 os.environ['MOZ_HEADLESS'] = '1'
 FF_BIN = FirefoxBinary('/usr/bin/firefox', log_file=sys.stdout)
 def make_ff_driver():
-        global PROXY_HOST, PROXY_PORT, FF_BIN
-        fp = webdriver.FirefoxProfile()
-        fp.set_preference("network.proxy.type", 1)
-        fp.set_preference("network.proxy.http",PROXY_HOST)
-        fp.set_preference("network.proxy.http_port",PROXY_PORT)
-        fp.set_preference("network.proxy.ssl",PROXY_HOST)
-        fp.set_preference("network.proxy.ssl_port",PROXY_PORT)
-        fp.set_preference("http.response.timeout", 5)
-        fp.set_preference("dom.max_script_run_time", 5)
-        fp.set_preference("network.http.connection-timeout", 10);
-        fp.set_preference("network.http.connection-retry-timeout", 10);
-        fp.update_preferences()
-        return webdriver.Firefox(firefox_profile=fp, firefox_binary=FF_BIN)
+    global PROXY_HOST, PROXY_PORT, FF_BIN
+    fp = webdriver.FirefoxProfile()
+    fp.set_preference("network.proxy.type", 1)
+    fp.set_preference("network.proxy.http",PROXY_HOST)
+    fp.set_preference("network.proxy.http_port",PROXY_PORT)
+    fp.set_preference("network.proxy.ssl",PROXY_HOST)
+    fp.set_preference("network.proxy.ssl_port",PROXY_PORT)
+    fp.set_preference("http.response.timeout", 5)
+    fp.set_preference("dom.max_script_run_time", 5)
+    fp.set_preference("network.http.connection-timeout", 10);
+    fp.set_preference("network.http.connection-retry-timeout", 10);
+    fp.update_preferences()
+    return webdriver.Firefox(firefox_profile=fp, firefox_binary=FF_BIN)
 
 def do_request(driver, rid, url):
     """ 
@@ -74,7 +70,7 @@ def do_request(driver, rid, url):
         return False
 
     if not dec_url.lower().startswith("http://") and not dec_url.lower().startswith("https://"):
-        logger.warn("Skipping request of malformed url {}".format(url))
+        logger.warn("Skipping request of malformed url {}".format(dec_url))
         return False
 
     #s = time.time()
@@ -89,10 +85,12 @@ def do_request(driver, rid, url):
     try:
         driver.get(internal_url)
     except TimeoutException:
-        logger.warning("Timeout")
+        logger.warning("Timeout loading {}".format(internal_url))
         return False
     except UnexpectedAlertPresentException as e:
-        print("Saw alert: {}".format(e))
+        logger.info("Saw alert: {}".format(e))
+
+    #logger.info("INTERNAL PAGE: {}".format(driver.page_source))
 
     try:
         lnk = driver.find_element_by_id("lnk")
@@ -100,13 +98,11 @@ def do_request(driver, rid, url):
         logger.warning("Couldn't find lnk in page: {}".format(driver.page_source))
         return False
 
-    #print("Clicking link...")
     try:
         lnk.click()
         driver.implicitly_wait(TIMEOUT)
     except UnexpectedAlertPresentException as e:
-        print("Saw alert: {}".format(e))
-    #print(driver.page_source)
+        logger.info("Saw alert: {}".format(e))
 
     #e = time.time()
     #print("\t Request took {:f} seconds".format(e-s))
@@ -138,7 +134,7 @@ def run_thread(thread_id):
             to_process = r2.fetchall()
 
             if not len(to_process):
-                #logging.info("No requests to process...")
+                logging.info("No requests to process...")
                 time.sleep(NOTHING_WAIT)
 
             # For each selected request, try to fetch the page
@@ -185,11 +181,14 @@ if __name__ == '__main__':
     import sys
     assert(len(sys.argv) == 4), "Usage: ./admin.py [Internal-WWW public IP] [Internal-WWW Port] [Localhost's Proxy Port]"
 
-    global INTERNAL, PROXY_PORT
+    global INTERNAL, PROXY_HOST, PROXY_PORT
     # Public IP/port to connect to for internal-www
     INTERNAL = sys.argv[1]+":"+sys.argv[2]
     # Port to use for the proxy. Assumed to be running on localhost
     PROXY_PORT=int(sys.argv[3])
+
+    # Host for the proxy
+    PROXY_HOST = sys.argv[1]
 
     with ThreadPoolExecutor(max_workers=NUM_THREADS) as e:
         futures = []

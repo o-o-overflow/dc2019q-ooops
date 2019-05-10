@@ -22,7 +22,7 @@ BAD_WORD = "overflow"
 # Ports other than these are blocked
 ALLOWED_PORTS = [80, 443, 5000]
 
-db_name = "../database.sqlite"
+db_name = "/app/database.sqlite"
 
 HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=\'"\\ \(\),]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
 
@@ -33,7 +33,7 @@ conn = sqlite3.connect(db_name)
 cur = conn.cursor()
 
 def is_local_user(ip):
-    return ip in["localhost", "127.0.0.1", PUBLIC_IP]
+    return ip in["localhost", "127.0.0.1", GRADER_IP]
 
 
 def update_db(user, url):
@@ -179,7 +179,7 @@ class MyProxy(proxy.Proxy):
 
         path = os.path.abspath(path)
         if path.startswith(PROXY_BASE):
-            local_file = "./prox-internal" + path.split(PROXY_BASE)[1] # Skip past proxy base
+            local_file = "/app/proxy/prox-internal" + path.split(PROXY_BASE)[1] # Skip past proxy base
             if ".." in local_file: 
                 self.transport.loseConnection()
                 return
@@ -189,7 +189,7 @@ class MyProxy(proxy.Proxy):
                     lines = data.decode("utf-8", "ignore").split("\r\n")
                     url=None
                     for line in lines:
-                        if "url=" in line and "reason=" in line: # Found it
+                        if "url=" in line: # Found it
                             urldata = line.split("url=")[1]
                             try:
                                 url=unquote(urldata.split("&")[0])
@@ -245,12 +245,12 @@ class ProxyFactory(http.HTTPFactory):
 
 if __name__ == '__main__':
     import sys
-    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Public IP] [Port]"
+    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Grader IP] [Port]"
 
-    global PUBLIC_IP, PORT
-    # IP to allow passwordless connections from
-    # because selenium can't handle proxies with passwords
-    PUBLIC_IP = sys.argv[1]
+    global GRADER_IP, PORT
+    # GRADER_IP used to allow passwordless connections from admin
+    # because selenium can't handle proxies with passwords :(
+    GRADER_IP = sys.argv[1]
     # Port to listen on
     PORT = int(sys.argv[2])
 
