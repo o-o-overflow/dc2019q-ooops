@@ -34,8 +34,8 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [x] Write and validate end-to-end exploit
 - [x] Move everything into docker container
 - [x] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
-- [ ] Update info.pac with load-balanced url 
-- [ ] Add captcha/proof of work to unblock requests
+- [x] Update info.pac with load-balanced url 
+- [x] Add captcha to unblock requests
 - [ ] Stress test and update info.yaml with number of allowed connections
 - [ ] Debug issues building container with `./tester` (though manual building works)
 - [ ] Don't use sequential IDs on internal-www so teams can't steal exploits

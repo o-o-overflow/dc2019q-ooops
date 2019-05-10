@@ -3,6 +3,10 @@
 import sys
 import os
 import sqlite3
+import uuid # TODO: use for DB keys
+import string
+from captcha.image import ImageCaptcha
+from random import choice, randint
 from twisted.web import proxy, http
 from twisted.python import log
 from twisted.internet import reactor, ssl
@@ -11,12 +15,21 @@ from OpenSSL import SSL as OSSL
 
 # CONFIG
 BAD_WORD = "overflow"
-#DB_NAME = "/app/database.sqlite"
-#FILE_DIR = "/app/proxy/prox-internal"
-FILE_DIR = "prox-internal"
-DB_NAME = "database.sqlite"
 PROXY_BASE = "/ooops/d35fs23hu73ds"
-# end config
+CAPTCHA_LEN = 5
+
+# TODO: These paths are for docker
+DB_NAME = "/app/database.sqlite"
+FILE_DIR = "/app/proxy/prox-internal"
+
+# And these paths are for local debugging
+#FILE_DIR = "prox-internal"
+#DB_NAME = "database.sqlite"
+
+# END CONFIG
+
+# Global imageCaptcha object
+imageCaptcha = ImageCaptcha(fonts=['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf'])
 
 # Setup database connection
 conn = sqlite3.connect(DB_NAME)
@@ -59,6 +72,36 @@ def update_db(user, url):
     conn.execute(q, (user, url.encode("ascii")))
     conn.commit()
 
+def make_captcha(c_len=5):
+    global imageCaptcha
+# Write [junk].png and [junk].txt where the txt contains the answer
+    captcha_chars = string.ascii_letters+string.digits
+    ans   = ''.join(choice(captcha_chars) for i in range(c_len))
+    fname = ''.join(choice(captcha_chars) for i in range(c_len))
+    ans_fname = fname+".txt"
+    fname += ".png"
+
+    imageCaptcha.write(ans, os.path.join(FILE_DIR, 'captchas', fname))
+    with open(os.path.join(FILE_DIR, 'captchas', ans_fname), "w") as f:
+        f.write(ans)
+
+    return (os.path.join(PROXY_BASE, 'captchas', fname), fname)
+
+def check_captcha(imgname, guess):
+    fname = os.path.abspath(os.path.join(FILE_DIR, 'captchas', imgname))
+    ansname = fname.replace(".png", ".txt")
+    print(fname, ansname)
+    if ".." in imgname or FILE_DIR not in fname:
+        return False
+
+    if not os.path.isfile(fname) or not os.path.isfile(ansname):
+        return False
+
+    ans = open(ansname).read()
+    os.remove(fname)
+    os.remove(ansname)
+
+    return guess == ans
 
 class MySSLContext(ssl.DefaultOpenSSLContextFactory):
 
@@ -111,10 +154,24 @@ class FilterProxyRequest(proxy.ProxyRequest):
         # Swap PROXY_BASE prefix for FILE_DIR
         local_file=full_path_to_file(path).replace(PROXY_BASE, FILE_DIR)
 
-        # If it's a POST, try parsing an unblock request
-        if b'url' in self.args.keys():
-            url = self.args[b'url'][0].decode("ascii")
-            update_db(self.getClientIP().encode("ascii"), url)
+        msg = "" # Messages to show on page
+
+        # Try parsing an unblock request
+        if self.method.upper() == b'POST':
+            msg = "Missing arguments" # Default for a post
+
+        if b'url' in self.args and b'captcha_guess' in self.args and \
+            b'captcha_id' in self.args:
+
+            captcha_guess = self.args[b'captcha_guess'][0].decode("ascii")
+            captcha_id = self.args[b'captcha_id'][0].decode("ascii")
+
+            if check_captcha(captcha_id, captcha_guess):
+                msg = "Request submitted"
+                url = self.args[b'url'][0].decode("ascii")
+                update_db(self.getClientIP().encode("ascii"), url)
+            else:
+                msg = "Invalid captcha"
 
         if os.path.isfile(local_file) and local_file.startswith(FILE_DIR):
             # If file exists in FILE_DIR, serve it
@@ -123,14 +180,30 @@ class FilterProxyRequest(proxy.ProxyRequest):
                 ext = local_file.split(".")[-1]
                 if ext == "js": ctype = "script/javascript"
                 if ext == "jpg": ctype = "image/jpeg"
+                if ext == "png": ctype = "image/png"
 
             file_len = os.path.getsize(local_file)
             self.setResponseCode(200)
             self.setHeader("Content-Type", ctype.encode("ascii"))
             self.setHeader("Content-Length", str(file_len).encode("ascii"))
 
-            for _bytes in read_bytes_from_file(local_file):
-                self.write(_bytes)
+            if ctype == "text/html": # Small file, safe to parse all at once
+                with open (local_file) as f:
+                    _file_contents = f.read()
+                    if "{captcha_" in _file_contents:
+                        # Dynamically rewrite captcha template tags
+                        c_path, c_id = make_captcha()
+                        _file_contents = _file_contents.replace("{captcha_url}", c_path)
+                        _file_contents = _file_contents.replace("{captcha_id}", c_id)
+
+                    if "{msg}" in _file_contents:
+                        _file_contents = _file_contents.replace("{msg}", msg)
+
+                    self.write(_file_contents.encode("ascii"))
+
+            else: # Binray, just send raw bytes
+                for _bytes in read_bytes_from_file(local_file):
+                    self.write(_bytes)
 
             self.transport.write(b"\r\n")
             self.finish()

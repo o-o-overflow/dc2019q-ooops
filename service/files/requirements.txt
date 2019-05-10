@@ -24,3 +24,4 @@ Twisted==19.2.0
 urllib3==1.25.2
 Werkzeug==0.15.2
 zope.interface==4.6.0
+captcha==0.3
