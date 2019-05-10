@@ -3,3 +3,6 @@ database.sqlite
 cert/
 ghostdriver.log
 public_bundle.tar.gz
+scratch/
+geckodriver.log
+venv
