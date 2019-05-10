@@ -21,6 +21,8 @@ CAPTCHA_LEN = 5
 # TODO: These paths are for docker
 DB_NAME = "/app/database.sqlite"
 FILE_DIR = "/app/proxy/prox-internal"
+CERT_FILE = "/app/ca.crt"
+CERT_KEY = "/app/ca.key"
 
 # And these paths are for local debugging
 #FILE_DIR = "prox-internal"
@@ -110,21 +112,21 @@ class MySSLContext(ssl.DefaultOpenSSLContextFactory):
         #args['privateKeyFileName'] = 'cert/ca.key'
         #args['certificateFileName'] = 'cert/ca.crt'
         ssl.DefaultOpenSSLContextFactory.__init__(self,
-         "cert/ca.key", "cert/ca.crt", sslmethod=OSSL.TLSv1_1_METHOD)
+         CERT_FILE, CERT_KEY, sslmethod=OSSL.TLSv1_1_METHOD)
 
    """
    def getContext(self):
        ctx = OSSL.Context(OSSL.TLSv1_1_METHOD)
-       ctx.use_certificate_file('cert/ca.crt')
-       ctx.use_privatekey_file('cert/ca.key')
+       ctx.use_certificate_file(CERT_FILE)
+       ctx.use_privatekey_file(CERT_KEY)
        return ctx
    """
 
 class MySSLContext2(ssl.ContextFactory):
    def getContext(self):
        ctx = OSSL.Context(OSSL.TLSv1_1_METHOD)
-       ctx.use_certificate_file('cert/ca.crt')
-       ctx.use_privatekey_file('cert/ca.key')
+       ctx.use_certificate_file(CERT_FILE)
+       ctx.use_privatekey_file(CERT_KEY)
        return ctx
 
 class FilterProxyRequest(proxy.ProxyRequest):

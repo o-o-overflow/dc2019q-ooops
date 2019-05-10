@@ -60,6 +60,9 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 expose $PROXY_PORT
 expose $ADMIN_WWW_PORT
 
+# Setup ssl certs into /app/ca.crt, and /app/ca.key
+RUN cd /app && ./proxy/cert/make_cert.sh
+
 # Start script which runs all 3 components
 RUN chmod +x /app/run.sh
 CMD ["/bin/sh", "-c", "/app/run.sh $ADMIN_WWW_PORT $PROXY_PORT"]
