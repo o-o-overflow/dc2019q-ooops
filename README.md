@@ -32,9 +32,10 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 
 ## Remaining TODOs
 - [x] Write and validate end-to-end exploit
-- [ ] Move everything into docker container
+- [x] Move everything into docker container
 - [x] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
 - [ ] Finalize infrastructure design for load-balanced URL / IP addresses
 - [ ] Add captcha/proof of work to unblock requests
 - [ ] Don't use sequential IDs on internal-www so teams can't steal exploits
+- [ ] Switch internal servier to gunicorn or something more reliable
 - [ ] (Optional) add HTTPS support to proxy
