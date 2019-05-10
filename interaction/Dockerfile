@@ -16,12 +16,18 @@ RUN wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x
   chmod ugo+x /usr/bin/phantomjs && \
   rm -rf phantomjs-2.1.1-linux-x86_64 phantomjs.tar.bz2
 
+# Extra dependencies for tests
+RUN apt-get -qq update && apt-get install -qq curl
+
+
 RUN mkdir /tests
 
 # Set up virtualenv and install dependencies
-COPY files/requirements.txt /tests
+COPY requirements.txt /tests
 RUN python3 -m virtualenv --python=/usr/bin/python3 /tests/venv
 RUN . /tests/venv/bin/activate && pip install -r /tests/requirements.txt
 
-COPY *.sh /tests
-COPY *.py /tests
+COPY *.sh /
+COPY *.py /
+
+RUN chmod +x *.sh *.py

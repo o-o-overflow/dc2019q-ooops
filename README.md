@@ -39,8 +39,8 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [d] Write automated end-to-end exploit for testing
 - [x] Consider switching back to phantomJS for faster xss testing
 - [ ] Stress test and update info.yaml with number of allowed connections
-- [ ] Debug issues building container with `./tester` (though manual building works)
-- [ ]  (Optional) Add more CSS to make everything look better
+- [x] Debug issues building container with `./tester` (though manual building works)
+- [x]  (Optional) Add more CSS to make everything look better
 - [ ]  (Optional) Switch internal server to gunicorn or something more reliable for admin
 - [ ]  (Optional) finish adding HTTPS support to proxy
 

@@ -18,7 +18,7 @@ BAD_WORD = "overflow"
 PROXY_BASE = "/ooops/d35fs23hu73ds"
 CAPTCHA_LEN = 5
 
-# TODO: These paths are for docker
+# Note these paths are for docker
 DB_NAME = "/app/database.sqlite"
 FILE_DIR = "/app/proxy/prox-internal"
 CERT_FILE = "/app/cert/ca.crt"
@@ -70,7 +70,7 @@ def update_db(user, url):
     global cur
     # B64 encode data. Probably overkill?
     q = "INSERT into requests VALUES (?, DateTime('now'), ?, 0);"
-    log.err("Inserting: {} with values {} and {}".format(q, user, url.encode('ascii')))
+    #log.err("Inserting: {} with values {} and {}".format(q, user, url.encode('ascii')))
     conn.execute(q, (user, url.encode("ascii")))
     conn.commit()
 
@@ -180,6 +180,7 @@ class FilterProxyRequest(proxy.ProxyRequest):
                 if ext == "js": ctype = "script/javascript"
                 if ext == "jpg": ctype = "image/jpeg"
                 if ext == "png": ctype = "image/png"
+                if ext == "css": ctype = "text/css"
 
             file_len = os.path.getsize(local_file)
             self.setResponseCode(200)

@@ -23,6 +23,7 @@ echo "Start internal"
 echo "Start proxy"
 /app/proxy/run-proxy.py $CONTAINER_IP $PROXY_PORT &
 
-echo "Start admins (TODO: multiple)"
-#/app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
+echo "Start 3 admin processes"
+/app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
+/app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT &
 /app/admin/admin.py $CONTAINER_IP $ADMIN_PORT $PROXY_PORT

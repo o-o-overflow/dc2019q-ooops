@@ -41,8 +41,7 @@ ARG ADMIN_WWW_PORT
 ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 
 # Expose proxy port and admin_WWW (just to give a hint about local connections)
-expose $PROXY_PORT
-expose $ADMIN_WWW_PORT
+expose $PROXY_PORT $ADMIN_WWW_PORT
 
 # Setup ssl certs into /app/cert/ca.crt, and /app/cert/ca.key
 RUN mkdir /app/cert
