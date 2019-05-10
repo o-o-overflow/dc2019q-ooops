@@ -25,7 +25,6 @@ def close_db(e=None):
 		db.close()
 
 
-
 def is_local(request):
 	"""
 	Check if this request is from an internal IP. If x-forwarded-for header, use that
@@ -40,9 +39,8 @@ def is_local(request):
 			if not(is_local_ip(v)):
 				return False
 
-	# Without x-forwarded, just check IP directly. Shouldn't really ever happen
+	# Without x-forwarded, just check IP directly. Should only happen for our admin grader
 	ip = request.remote_addr
-	print("INTERNAL-WWW: WARNING- direct connection from {}".format(ip))
 	return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
 
 # Home. Just so it's clear this is a website
@@ -69,7 +67,7 @@ def view_request(uid):
 	try:
 		url = row["url"].decode("ascii")
 	except Exception as e:
-		print(e)
+		print("Exception decoding URL from db {}. Possible SQLi attempt: {}".format(e, url))
 		url = "error"
 	return render_template("view.html", row=row, url=url, q=q)
 
