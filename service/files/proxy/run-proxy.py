@@ -5,12 +5,16 @@ import os
 import sqlite3
 from twisted.web import proxy, http
 from twisted.python import log
+from twisted.internet import reactor, ssl
 from twisted.python.compat import urllib_parse, urlquote
+from OpenSSL import SSL as OSSL
 
 # CONFIG
 BAD_WORD = "overflow"
-DB_NAME = "/app/database.sqlite"
-FILE_DIR = "/app/proxy/prox-internal"
+#DB_NAME = "/app/database.sqlite"
+#FILE_DIR = "/app/proxy/prox-internal"
+FILE_DIR = "prox-internal"
+DB_NAME = "database.sqlite"
 PROXY_BASE = "/ooops/d35fs23hu73ds"
 # end config
 
@@ -55,6 +59,31 @@ def update_db(user, url):
     conn.execute(q, (user, url.encode("ascii")))
     conn.commit()
 
+
+class MySSLContext(ssl.DefaultOpenSSLContextFactory):
+
+   def __init__(self, *args, **kw):
+        #kw['sslmethod'] = OSSL.TLSv1_METHOD
+        #args['privateKeyFileName'] = 'cert/ca.key'
+        #args['certificateFileName'] = 'cert/ca.crt'
+        ssl.DefaultOpenSSLContextFactory.__init__(self,
+         "cert/ca.key", "cert/ca.crt", sslmethod=OSSL.TLSv1_1_METHOD)
+
+   """
+   def getContext(self):
+       ctx = OSSL.Context(OSSL.TLSv1_1_METHOD)
+       ctx.use_certificate_file('cert/ca.crt')
+       ctx.use_privatekey_file('cert/ca.key')
+       return ctx
+   """
+
+class MySSLContext2(ssl.ContextFactory):
+   def getContext(self):
+       ctx = OSSL.Context(OSSL.TLSv1_1_METHOD)
+       ctx.use_certificate_file('cert/ca.crt')
+       ctx.use_privatekey_file('cert/ca.key')
+       return ctx
+
 class FilterProxyRequest(proxy.ProxyRequest):
     # Called when we get a request from a client
 
@@ -76,7 +105,7 @@ class FilterProxyRequest(proxy.ProxyRequest):
         self.finish()
 
 
-    def serve_internal(self, path):
+    def serve_internal(self, path, doSSL):
         # Render internal page
         global PROXY_BASE, FILE_DIR
         # Swap PROXY_BASE prefix for FILE_DIR
@@ -110,30 +139,57 @@ class FilterProxyRequest(proxy.ProxyRequest):
             self.write("File not found\r\n".encode("ascii"))
             self.finish()
 
-    def serve_blocked(self):
+    def serve_blocked(self, doSSL):
         path = PROXY_BASE +"/blocked.html"
-        self.serve_internal(path)
+        self.serve_internal(path, doSSL)
+
+    protocols = {b'http': proxy.ProxyClientFactory, b'https': proxy.ProxyClientFactory}
+    ports = {b'http': 80, b'https': 443}
 
     # Overload process for bugfixes AND to intercept request
-    # For https see https://twistedmatrix.com/pipermail/twisted-python/2008-August/018227.html
+    # https logic from
+    # https://twistedmatrix.com/pipermail/twisted-python/2008-August/018227.html
     def process(self, args=None):
         if not self.has_valid_creds():
             self.request_creds()
             return None
 
+
         parsed = urllib_parse.urlparse(self.uri)
         protocol = parsed[0]
         host = parsed[1].decode('ascii')
+
+        port = 80
+        if protocol != b'':
+            port = self.ports[protocol]
+        if ':' in host:
+            host, port = host.split(':')
+            port = int(port)
+
+        doSSL = False
+        if self.method.upper() == b"CONNECT": # TODO: finish HTTPS support
+            #self.setResponseCode(200)
+            self.transport.write("HTTP/1.1 200 Connection established\r\nConnection: close\n\n".encode("ascii"))
+            self.transport.startTLS(MySSLContext2())
+            protocol = b"https"
+            self.host = parsed.scheme
+            #self.transport.write("HTTPS unsupported\r\n".encode("ascii"))
+            self.finish()
+            return
+        else:
+            if self.isSecure():
+                headers = self.getAllHeaders().copy()
+                host = headers["host"]
+                protocol = b"https"
+                doSSL = True
+
+
         if protocol not in self.ports:
             self.setResponseCode(400)
             self.write("Unsupported protocol\r\n".encode("ascii"))
             self.finish()
             return None
 
-        port = self.ports[protocol]
-        if ':' in host:
-            host, port = host.split(':')
-            port = int(port)
         rest = urllib_parse.urlunparse((b'', b'') + parsed[2:])
         if not rest:
             rest = rest + b'/'
@@ -162,13 +218,18 @@ class FilterProxyRequest(proxy.ProxyRequest):
         dec_path = self.path.decode("ascii", "ignore")
         if is_internal_page(dec_path):
             # 1st priority: internal pages
-            self.serve_internal(dec_path)
+            self.serve_internal(dec_path, doSSL)
         elif should_block(dec_path):
             # 2nd priority: blocked page
-            self.serve_blocked()
+            self.serve_blocked(doSSL)
         else: 
             # 3rd priority: regular page
-            self.reactor.connectTCP(host, port, clientFactory)
+            if doSSL:
+                print("Trying connect ssl to {} on {}".format(host, port))
+                self.reactor.connectSSL(host, port, clientFactory,
+                    ssl.ClientContextFactory())
+            else:
+                self.reactor.connectTCP(host, port, clientFactory)
 
 class FilterProxy(proxy.Proxy):
     def requestFactory(self, *args):
@@ -179,23 +240,21 @@ class FilterProxyFactory(http.HTTPFactory):
         protocol = FilterProxy()
         return protocol
 
-if __name__ == '__main__':
-    from twisted.internet import reactor
-    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Grader IP] [Port]"
+assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Grader IP] [Port]"
 
-    global GRADER_IP, PORT
-    # GRADER_IP used to allow passwordless connections from admin
-    # because selenium can't handle proxies with passwords :(
-    GRADER_IP = sys.argv[1]
-    # Port to listen on
-    PORT = int(sys.argv[2])
+global GRADER_IP, PORT
+# GRADER_IP used to allow passwordless connections from admin
+# because selenium can't handle proxies with passwords :(
+GRADER_IP = sys.argv[1]
+# Port to listen on
+PORT = int(sys.argv[2])
 
-    prox = FilterProxyFactory()
-    reactor.listenTCP(PORT, prox)
-    """
-    # TODO: SSL
-    reactor.listenSSL(PORT, factory,
-            ssl.DefaultOpenSSLContextFactory(
-                'cert/ca.key', 'cert/ca.crt'))
-    """
-    reactor.run()
+prox = FilterProxyFactory()
+reactor.listenTCP(PORT, prox)
+"""
+# TODO: SSL
+reactor.listenSSL(PORT, factory,
+        ssl.DefaultOpenSSLContextFactory(
+            'cert/ca.key', 'cert/ca.crt'))
+"""
+reactor.run()
