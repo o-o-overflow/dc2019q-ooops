@@ -26,13 +26,29 @@ def close_db(e=None):
 		db.close()
 
 
-def is_local(ip):
+
+def is_local(request):
+	"""
+	Check if this request is from an internal IP. If x-forwarded-for header, use that
+	"""
+	def is_local_ip(ip):
+		return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
+
+	# Check every possible X-forwarded-header to see if any are non-local
+	# IPs. If so, return false
+	for k,v in request.headers:
+		if k.lower() == "x-forwarded-for":
+			if not(is_local_ip(v)):
+				return False
+
+	# Without x-forwarded, just check IP directly
+	ip = request.remote_addr
 	return ip == "127.0.0.1" or ip == "localhost" or ip == PUBLIC_IP
 
 # Home. Just so it's clear this is a website
 @app.route('/')
 def home():
-	if not is_local(request.remote_addr):
+	if not is_local(request):
 		return render_template("error.html", msg="Only internal users may access this website")
 	return render_template("home.html")
 
@@ -42,7 +58,7 @@ def home():
 # TODO: Don't use uid?
 @app.route('/admin/view/<uid>')
 def view_request(uid):
-	if not is_local(request.remote_addr):
+	if not is_local(request):
 		return render_template("error.html", msg="Only internal users may access this website")
 
 	con = get_db()
@@ -60,14 +76,12 @@ def view_request(uid):
 
 @app.route('/css/bootstrap.min.css')
 def css():
-	#if not is_local(request.remote_addr):
-	#	return render_template("error.html", msg="Only local users may access this website")
 	return send_file("css/bootstrap.min.css")
 
 # Remote users only get errors. Local users can see 404s for every other page
 @app.errorhandler(404)
 def page_not_found(e):
-	if not is_local(request.remote_addr):
+	if not is_local(request):
 		return render_template("error.html", msg="Only local users may access this website")
 	return "Page not found", 404
 
