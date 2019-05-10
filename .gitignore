@@ -6,3 +6,4 @@ public_bundle.tar.gz
 scratch/
 geckodriver.log
 venv
+*.pyc

