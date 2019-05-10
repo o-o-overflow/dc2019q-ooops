@@ -1,7 +1,8 @@
 FROM ubuntu:18.04
 
 run echo "travis_fold:start:Dapt\033[33;1mservice Dockerfile apt\033[0m" && \
-    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv python3-setuptools wget sqlite3 && \
+    apt-get -qq update && apt-get install -qq clang python3 python3-dev python3-openssl xinetd firefox build-essential python3-virtualenv \
+    python3-setuptools wget sqlite3 cron sudo && \
     echo "\ntravis_fold:end:Dapt\r"
 
 # Install geckodriver
@@ -40,8 +41,7 @@ ENV ADMIN_WWW_PORT ${ADMIN_WWW_PORT:-5000}
 # Expose proxy port and admin_WWW (just to give a hint about local connections)
 expose $PROXY_PORT $ADMIN_WWW_PORT
 
-# Cron to cleanup unchecked captchas (TODO move up)
-RUN apt-get install -qq cron sudo
+# Cron to cleanup unchecked captchas
 ADD files/proxy/captcha_clean_cron /etc/cron.d/captcha_clean_cron
 RUN chmod 0644 /etc/cron.d/captcha_clean_cron
 

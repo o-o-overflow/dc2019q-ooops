@@ -51,9 +51,6 @@ def home():
 	return render_template("home.html")
 
 # Main page.
-# Exploitable with SQLi:
-# admin/view/0 union select 1,(select flag from flag),3,4,5
-# TODO: Don't use uid?
 @app.route('/admin/view/<uid>')
 def view_request(uid):
 	if not is_local(request):
@@ -61,7 +58,7 @@ def view_request(uid):
 
 	con = get_db()
 	cur = con.cursor()
-	q = "select rowid,* from requests where rowid={};".format(uid) # XXX: Exploitable :)
+	q = "select rowid,* from requests where rowid={};".format(uid)
 	cur.execute(q)
 	row = cur.fetchone()
 	try:
