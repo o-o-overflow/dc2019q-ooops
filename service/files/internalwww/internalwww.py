@@ -59,8 +59,13 @@ def view_request(uid):
 	con = get_db()
 	cur = con.cursor()
 	q = "select rowid,* from requests where rowid={};".format(uid)
-	cur.execute(q)
-	row = cur.fetchone()
+	try:
+		cur.execute(q)
+		row = cur.fetchone()
+	except Exception as e:
+		print("Invalid SQL query: {}".format(q))
+		return render_template("error.html", msg="SQL Error: {}".format(e))
+
 	try:
 		url = row["url"].decode("ascii")
 	except Exception as e:
