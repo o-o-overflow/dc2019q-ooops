@@ -8,16 +8,14 @@ from twisted.python import log
 from twisted.python.compat import urllib_parse, urlquote
 
 # CONFIG
-PROXY_PORT = 8090
-GRADER_IP = "127.0.0.1"
 BAD_WORD = "overflow"
-db_name = "database.sqlite"
+DB_NAME = "/app/database.sqlite"
 FILE_DIR = "./prox-internal"
 PROXY_BASE = "/ooops/d35fs23hu73ds"
 # end config
 
 # Setup database connection
-conn = sqlite3.connect(db_name)
+conn = sqlite3.connect(DB_NAME)
 cur = conn.cursor()
 
 def full_path_to_file(path):
@@ -177,8 +175,23 @@ class FilterProxyFactory(http.HTTPFactory):
         protocol = FilterProxy()
         return protocol
 
+if __name__ == '__main__':
+    from twisted.internet import reactor
+    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Grader IP] [Port]"
 
-from twisted.internet import reactor
-prox = FilterProxyFactory()
-reactor.listenTCP(PROXY_PORT, prox)
-reactor.run()
+    global GRADER_IP, PORT
+    # GRADER_IP used to allow passwordless connections from admin
+    # because selenium can't handle proxies with passwords :(
+    GRADER_IP = sys.argv[1]
+    # Port to listen on
+    PORT = int(sys.argv[2])
+
+    prox = FilterProxyFactory()
+    reactor.listenTCP(PORT, prox)
+    """
+    # TODO: SSL
+    reactor.listenSSL(PORT, factory,
+            ssl.DefaultOpenSSLContextFactory(
+                'cert/ca.key', 'cert/ca.crt'))
+    """
+    reactor.run()
