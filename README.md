@@ -37,5 +37,5 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [ ] Finalize infrastructure design for load-balanced URL / IP addresses
 - [ ] Add captcha/proof of work to unblock requests
 - [ ] Don't use sequential IDs on internal-www so teams can't steal exploits
-- [ ] Switch internal servier to gunicorn or something more reliable
-- [ ] (Optional) add HTTPS support to proxy
+- [ ]  (Optional) Switch internal server to gunicorn or something more reliable
+- [ ]  (Optional) finish adding HTTPS support to proxy
