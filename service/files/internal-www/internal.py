@@ -67,7 +67,7 @@ def view_request(uid):
 	try:
 		url = row["url"].decode("ascii")
 	except Exception as e:
-		print("Exception decoding URL from db {}. Possible SQLi attempt: {}".format(e, url))
+		print("Exception decoding URL from db {}. Possible SQLi attempt: {}".format(e, row["url"]))
 		url = "error"
 	return render_template("view.html", row=row, url=url, q=q)
 
