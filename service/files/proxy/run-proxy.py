@@ -1,288 +1,184 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import sys
-import re
 import os
 import sqlite3
-import string
-from urllib.parse import unquote
 from twisted.web import proxy, http
-from twisted.internet import reactor, ssl
 from twisted.python import log
-from base64 import b64encode
+from twisted.python.compat import urllib_parse, urlquote
 
-log.startLogging(sys.stdout)
-
-# Configuration
-PROXY_BASE = "/ooops/d35fs23hu73ds"
-
-# URLs containing this are blocked
+# CONFIG
+PROXY_PORT = 8090
+GRADER_IP = "127.0.0.1"
 BAD_WORD = "overflow"
-
-# Ports other than these are blocked
-ALLOWED_PORTS = [80, 443, 5000]
-
-db_name = "/app/database.sqlite"
-
-HTTP_REGEX=re.compile(b'^([A-Z]*) ([a-zA-Z]*\:\/\/)?([a-zA-z0-9\-.]*)(:[\d]*)?(\/([A-Za-z0-9\/\-\_\.\;\%\=\'"\\ \(\),]*))?((\?([A-Za-z_0-9\'"!%&()\*+,-./:;=?@\\\\^_`{}|~\[\]])*)?)? HTTP\/\d.\d')
-
-# End configuration
+db_name = "database.sqlite"
+FILE_DIR = "./prox-internal"
+PROXY_BASE = "/ooops/d35fs23hu73ds"
+# end config
 
 # Setup database connection
 conn = sqlite3.connect(db_name)
 cur = conn.cursor()
 
-def is_local_user(ip):
-    return ip in["localhost", "127.0.0.1", GRADER_IP]
+def full_path_to_file(path):
+    print(path)
+    no_proto = path.split("://")[1]
+    path_only = no_proto[no_proto.index("/"):]
+    path_only = os.path.abspath(path_only)
+    return path_only
 
+def is_internal_page(path):
+    # Determine if a page is internal (prefixed with PROXY_BASE)
+    global PROXY_BASE
+    return full_path_to_file(path).startswith(PROXY_BASE)
+
+def should_block(full_path):
+    global BAD_WORD
+    return BAD_WORD in full_path
+
+def read_bytes_from_file(file, chunk_size = 2048):
+    with open(file, 'rb') as file:
+        while True:
+            chunk = file.read(chunk_size)
+            if chunk:
+                yield chunk
+            else:
+                break
 
 def update_db(user, url):
     global cur
     # B64 encode data. Probably overkill?
     q = "INSERT into requests VALUES (?, DateTime('now'), ?, 0);"
     log.err("Inserting: {}".format(q))
-    conn.execute(q, (user, b64encode(url.encode("utf-8"))))
+    conn.execute(q, (user, url.encode("ascii")))
     conn.commit()
 
-def html(text):
-    return """<!doctype html>
-<html>
-{}
-</html>""".format(text)
+class FilterProxyRequest(proxy.ProxyRequest):
+    # Called when we get a request from a client
 
-def err(code, msg):
-    return "HTTP/1.1 {code} {msg}\r\n\r\n{msg}\r\n".format(code=code, msg=msg).encode("utf-8")
+    def has_valid_creds(self):
+        global GRADER_IP
+        ip = self.getClientIP().encode('ascii')
+        # Selenium can't handle proxy creds so just whitelist it by IP
+        if ip in["localhost", "127.0.0.1", GRADER_IP]: return True
 
-def blocked(url, port, path):
-    global BAD_WORD, ALLOWED_PORTS
-    if BAD_WORD in url or port not in ALLOWED_PORTS:
-        if PROXY_BASE not in path: # Don't block internal pages, even on blocked sites
-            return True
-    return False
-
-def read_bytes_from_file(file, chunk_size = 2048):
-    with open(file, 'rb') as file:
-        while True:
-            chunk = file.read(chunk_size)
-            
-            if chunk:
-                    yield chunk
-            else:
-                break
-
-class MyProxy(proxy.Proxy):
-    def respond(self, msg, ctype="text/html"):
-        m = html(msg)
-        self.transport.write("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\r\n{}".format(len(m), m, ctype).encode("utf-8"))
-        #self.write(html(msg))
-        self.transport.loseConnection()
+        return self.getHeader("Proxy-Authorization") == \
+                "Basic T25seU9uZTpPdmVyZmxvdw==" # OnlyOne:Overflow
 
     def request_creds(self):
-        # Ask for credentials
-        self.transport.write("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Access to proxy site\"\r\n\r\n{}".encode("utf-8"))
-        self.transport.loseConnection()
+        self.setResponseCode(407)
+        self.setHeader("Proxy-Authenticate", "Basic realm=\"Access to proxy site".encode("ascii"))
+        self.write("Auth required".encode("ascii"))
+        self.finish()
 
-    def has_valid_creds(self, data):
-        data = data.decode("utf-8", "ignore")
-        if "Proxy-Authorization: " not in data:
-            self.request_creds()
-            print("Missing auth token")
-            return False
-        postauth = data.split("Proxy-Authorization: ")[1]
-        if "\r\n" not in postauth:
-            print("Malformed proxy auth")
-            return False
 
-        auth_token = postauth.split("\n")[0].strip()
-        if auth_token=="Basic T25seU9uZTpPdmVyZmxvdw==": # OnlyOne:Overflow
-            return True
+
+
+    def serve_internal(self, path):
+        # Render internal page
+        global PROXY_BASE, FILE_DIR
+        # Swap PROXY_BASE prefix for FILE_DIR
+        local_file=full_path_to_file(path).replace(PROXY_BASE, FILE_DIR)
+
+        # If it's a POST, try parsing an unblock request
+        if b'url' in self.args.keys():
+            url = self.args[b'url'][0].decode("ascii")
+            update_db(self.getClientIP().encode("ascii"), url)
+
+        if os.path.isfile(local_file) and local_file.startswith(FILE_DIR):
+            # If file exists in FILE_DIR, serve it
+            ctype ="text/html"
+            if "." in local_file:
+                ext = local_file.split(".")[-1]
+                if ext == "js": ctype = "script/javascript"
+                if ext == "jpg": ctype = "image/jpeg"
+
+            file_len = os.path.getsize(local_file)
+            self.setResponseCode(200)
+            self.setHeader("Content-Type", ctype.encode("ascii"))
+            self.setHeader("Content-Length", str(file_len).encode("ascii"))
+
+            for _bytes in read_bytes_from_file(local_file):
+                self.write(_bytes)
+
+            self.transport.write(b"\r\n")
+            self.finish()
         else:
-            print("Wrong auth")
+            self.setResponseCode(404)
+            self.write("File not found\r\n".encode("ascii"))
+            self.finish()
+
+    def serve_blocked(self):
+        path = PROXY_BASE +"/blocked.html"
+        self.serve_internal(path)
+
+    # Overload process for bugfixes AND to intercept request
+    # For https see https://twistedmatrix.com/pipermail/twisted-python/2008-August/018227.html
+    def process(self, args=None):
+        if not self.has_valid_creds():
             self.request_creds()
-            return False
+            return None
+
+        parsed = urllib_parse.urlparse(self.uri)
+        protocol = parsed[0]
+        host = parsed[1].decode('ascii')
+        if protocol not in self.ports:
+            self.setResponseCode(400)
+            self.write("Unsupported protocol\r\n".encode("ascii"))
+            self.finish()
+            return None
+
+        port = self.ports[protocol]
+        if ':' in host:
+            host, port = host.split(':')
+            port = int(port)
+        rest = urllib_parse.urlunparse((b'', b'') + parsed[2:])
+        if not rest:
+            rest = rest + b'/'
+        if protocol not in self.protocols:
+            self.setResponseCode(400)
+            self.write("Unsupported protocol\r\n".encode("ascii"))
+            self.finish()
+            return None
+
+        class_ = self.protocols[protocol]
+        headers = self.getAllHeaders().copy()
+        if b'host' not in headers:
+            headers[b'host'] = host.encode('ascii')
+
+        # Add x-forwarded-for
+        headers[b'X-Forwarded-For'] = self.getClientIP().encode('ascii')
+
+        self.content.seek(0, 0)
+        s = self.content.read()
+        clientFactory = class_(self.method, rest, self.clientproto, headers,
+                               s, self)
+
+        #print("About to connect upstream to {}:{}".format(host, port))
+        #print("Headers for upstream: {}".format(headers))
+
+        dec_path = self.path.decode("ascii", "ignore")
+        if is_internal_page(dec_path):
+            # 1st priority: internal pages
+            self.serve_internal(dec_path)
+        elif should_block(dec_path):
+            # 2nd priority: blocked page
+            self.serve_blocked()
+        else: 
+            # 3rd priority: regular page
+            self.reactor.connectTCP(host, port, clientFactory)
+
+class FilterProxy(proxy.Proxy):
+    def requestFactory(self, *args):
+        return FilterProxyRequest(*args)
+
+class FilterProxyFactory(http.HTTPFactory):
+    def buildProtocol(self, addr):
+        protocol = FilterProxy()
+        return protocol
 
 
-    def dataReceived(self, data):
-        """
-        Client has send us a request, try to connect to it
-        """
-        global HTTP_REGEX
-        try:
-            return self._dataReceived(data)
-        except Exception as e:
-            print("Exception:" + str(e))
-            self.transport.loseConnection()
-            raise e
-            return False
-
-
-    def _dataReceived(self, data):
-        user = self.transport.getPeer()
-        user_ip = user.host
-
-        # Require authentication (unless it's the grader)
-        if not is_local_user(user_ip) and not self.has_valid_creds(data):
-            #print("Invalid creds\n\n")
-            self.transport.loseConnection()
-            return False
-
-        # Ensure we can parse the first line of the HTTP request or drop the connection
-        http_line_match = HTTP_REGEX.search(data)
-        if not http_line_match or not http_line_match.groups(0) or not http_line_match.groups(1):
-            #print("Malformed request")
-            #print(data)
-            self.transport.write(err(400, "Bad Request"))
-            self.transport.loseConnection()
-            return False
-
-
-        # Get method and check if it's https (CONNECT)
-        method  = http_line_match.groups(0)[0].decode("utf-8")
-        # We don't support HTTPS
-        if method == "CONNECT":
-            #print("Ignoring HTTPS connect")
-            self.transport.write(err(405, "Method Not Allowed"))
-            self.transport.loseConnection()
-            return False
-
-        # Extract and validate protocol
-        proto = http_line_match.groups(0)[1].decode("utf-8") # can be blank, or HTTP://, etc
-        if not proto.startswith("http") or not proto.endswith("://"):
-            #print("Fail: bad proto")
-            self.transport.write(err(400, "Bad Request"))
-            self.transport.loseConnection()
-            return
-
-        # Capture 
-        url   = http_line_match.groups(0)[2].decode("utf-8", "ignore") # Includes subdomains
-        port  = http_line_match.groups(0)[3] # Can be blank
-        path  = http_line_match.groups(1)[4].decode("utf-8", "ignore")
-        query = http_line_match.groups(0)[6].decode("utf-8", "ignore")
-
-        # Validate and reformat port
-        try:
-            port = int(port[1:]) if port else 80 # Trim leading : if specified, otherwise default to 80
-        except ValueError:
-            log.err("Invalid port")
-            self.transport.loseConnection()
-            return False
-
-        # Reformat query
-        if query is not None: query = query[1:]
-
-        log.msg("Request from {}. URL: {}. Port: {}. Path {}. Query: {}".format(user_ip, url, port, path, query))
-
-        # Check if request should be blocked, update path if it is
-        if blocked(url, port, path): # Update path so we'll respond with internal file blocked.html
-            log.msg("URL blocked")
-            path = PROXY_BASE + "/blocked.html"
-
-        # Transform path to simplify any weird directories
-        path = os.path.abspath(path)
-
-        if path.startswith(PROXY_BASE):
-            local_file = "/app/proxy/prox-internal" + path.split(PROXY_BASE)[1] # Skip past proxy base
-            """ # Note if it starts with prox-internal after abspath, it can't traverse any higher
-            if ".." in local_file: 
-                self.transport.loseConnection()
-                return False
-            """
-
-            if method == "GET" or method == "POST": # Load page if exists on get or post
-                if method == "POST": # For post, try parsing an unblock request
-                    lines = data.decode("utf-8", "ignore").split("\r\n")
-                    url=None
-                    for line in lines:
-                        if "url=" in line: # Found it
-                            urldata = line.split("url=")[1]
-                            try:
-                                url=unquote(urldata.split("&")[0])
-                            except:
-                                print("Warning: Couldn't parse postdata line: {}".format(urldata))
-                    if url:
-                        update_db(user_ip, url)
-                    else:
-                        print("Warning: Couldn't parse posted data url")
-
-                # Respond with raw file for get and post
-                if os.path.isfile(local_file): # Ignore directories
-                    ctype ="text/html"
-                    if "." in local_file:
-                        ext = local_file.split(".")[-1]
-                        if ext == "js": ctype = "script/javascript"
-                        if ext == "jpg": ctype = "image/jpeg"
-
-                    file_len = os.path.getsize(local_file)
-                    self.transport.write("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\n".format(file_len, ctype).encode("utf-8"))
-
-                    self.setRawMode()
-                    for _bytes in read_bytes_from_file(local_file):
-                        self.transport.write(_bytes)
-
-                    self.transport.write(b"\r\\n")
-                    self.setLineMode()
-                    self.transport.loseConnection()
-                    return False
-
-                else:
-
-                    self.transport.write("HTTP/1.1 404 File not Found\r\n\r\nPage not found\r\n".encode("utf-8"))
-                    self.transport.loseConnection()
-                    return False
-            else:
-                self.transport.write("HTTP/1.1 405 Method not Allowed\r\n\r\nMethod not Allowed\r\n".encode("utf-8"))
-                self.transport.loseConnection()
-                return True
-
-        # Require host: header
-
-        """
-        dec_req = data[:min(100, len(data))].decode("utf-8", "ignore")
-        if "\r\nHost: " not in dec_req:
-            self.transport.write(err(400, "Bad Request"))
-            self.transport.loseConnection()
-            return False
-        """
-
-        # We only accept encoding identiy to make our lives easier
-        data = re.sub(b'Accept-Encoding: [a-z, ]*', b'Accept-Encoding: identity', data)
-
-        # Add x-forward-for header by replacing host header?
-        #xforfor_host = ("X-Forwarded-For: {}\r\nHost: ".format(user_ip)).encode("utf-8")
-        #data = re.sub(b'Host:', xforfor_host, data)
-
-
-
-        return proxy.Proxy.dataReceived(self, data)
-    
-    def write(self, data):
-        if data:
-            #print("\nServer response:\n{}".format(data.decode("utf-8")))
-            self.transport.write(data)
-        if self.transport:
-            self.transport.loseConnection()
-
-class ProxyFactory(http.HTTPFactory):
-    protocol=MyProxy
-
-if __name__ == '__main__':
-    import sys
-    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Grader IP] [Port]"
-
-    global GRADER_IP, PORT
-    # GRADER_IP used to allow passwordless connections from admin
-    # because selenium can't handle proxies with passwords :(
-    GRADER_IP = sys.argv[1]
-    # Port to listen on
-    PORT = int(sys.argv[2])
-
-    factory = ProxyFactory()
-    reactor.listenTCP(PORT, factory)
-
-    """
-    # TODO: SSL
-    reactor.listenSSL(PORT, factory,
-            ssl.DefaultOpenSSLContextFactory(
-                'cert/ca.key', 'cert/ca.crt'))
-    """
-    reactor.run()
+from twisted.internet import reactor
+prox = FilterProxyFactory()
+reactor.listenTCP(PROXY_PORT, prox)
+reactor.run()
