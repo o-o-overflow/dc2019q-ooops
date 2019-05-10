@@ -6,17 +6,16 @@ from flask import g, Flask, render_template, request, send_file
 from base64 import b64decode
 
 # Configuration
-PUBLIC_IP = "192.168.1.159"
-db_name = "file:///home/fasano/desktop/defcon-proxy/proxy/database.sqlite?mode=ro"
+DB_NAME = "file:///app/database.sqlite?mode=ro"
 # End configuration
 
 app = Flask(__name__, template_folder="template")
 
 def get_db():
-	global db_name
+	global DB_NAME
 	if 'db' not in g:
 		# Now create a read-only handle for the rest of the app
-		g.db = sqlite3.connect(db_name, uri=True)
+		g.db = sqlite3.connect(DB_NAME, uri=True)
 		g.db.row_factory = sqlite3.Row
 
 	return g.db
@@ -73,7 +72,13 @@ def page_not_found(e):
 	return "Page not found", 404
 
 if __name__ == '__main__':
-	app.run(debug = True, host=PUBLIC_IP) # TODO: use a real server and turn off debug
-	#app.run(debug = True) #TODO
+	import sys
+	assert(len(sys.argv) == 3), "Usage: ./internal.py [Public IP] [Port]"
+
+	global PUBLIC_IP
+	PUBLIC_IP = sys.argv[1]
+
+	# TODO use a real webserver w/o debug
+	app.run(debug = True, host=PUBLIC_IP, port=int(sys.argv[2]))
 
 # vim: noet:ts=4:sw=4

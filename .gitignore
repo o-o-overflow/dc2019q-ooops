@@ -2,3 +2,4 @@ database.sqlite
 .*.sw*
 cert/
 ghostdriver.log
+public_bundle.tar.gz

@@ -14,12 +14,7 @@ from base64 import b64encode
 log.startLogging(sys.stdout)
 
 # Configuration
-PORT=7239
 PROXY_BASE = "/ooops/d35fs23hu73ds"
-
-# IP to allow passwordless connections from
-# because selenium can't handle proxies with passwords
-PUBLIC_IP="192.168.1.159"
 
 # URLs containing this are blocked
 BAD_WORD = "overflow"
@@ -248,13 +243,24 @@ class MyProxy(proxy.Proxy):
 class ProxyFactory(http.HTTPFactory):
     protocol=MyProxy
 
-factory = ProxyFactory()
-reactor.listenTCP(PORT, factory)
+if __name__ == '__main__':
+    import sys
+    assert(len(sys.argv) == 3), "Usage: ./run-proxy.py [Public IP] [Port]"
 
-"""
-# TODO: SSL
-reactor.listenSSL(PORT, factory,
-        ssl.DefaultOpenSSLContextFactory(
-            'cert/ca.key', 'cert/ca.crt'))
-"""
-reactor.run()
+    global PUBLIC_IP, PORT
+    # IP to allow passwordless connections from
+    # because selenium can't handle proxies with passwords
+    PUBLIC_IP = sys.argv[1]
+    # Port to listen on
+    PORT = int(sys.argv[2])
+
+    factory = ProxyFactory()
+    reactor.listenTCP(PORT, factory)
+
+    """
+    # TODO: SSL
+    reactor.listenSSL(PORT, factory,
+            ssl.DefaultOpenSSLContextFactory(
+                'cert/ca.key', 'cert/ca.crt'))
+    """
+    reactor.run()

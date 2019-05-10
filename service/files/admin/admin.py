@@ -15,9 +15,6 @@ import os
 import sys
 
 ##### configuration ######
-# Public IP/port to connect to for internal-www
-INTERNAL="192.168.1.159:5000"
-
 # Number of threads
 NUM_THREADS = 10
 
@@ -35,7 +32,6 @@ db_name = "../database.sqlite"
 
 # Proxy config
 PROXY_HOST="127.0.0.1"
-PROXY_PORT=7239
 ##########################
 
 
@@ -185,13 +181,23 @@ for _ in range(0, 10000):
 conn.commit()
 """
 
-with ThreadPoolExecutor(max_workers=NUM_THREADS) as e:
-    futures = []
-    for _ in range(NUM_THREADS):
-        thread_id = random.randint(3, 2**31)
-        logger.info("Starting thread with ID {}".format(thread_id))
-        futures.append(e.submit(run_thread, thread_id))
+if __name__ == '__main__':
+    import sys
+    assert(len(sys.argv) == 4), "Usage: ./admin.py [Internal-WWW public IP] [Internal-WWW Port] [Localhost's Proxy Port]"
 
-    for future in as_completed(futures):
-        if future.exception():
-            raise future.exception()
+    global INTERNAL, PROXY_PORT
+    # Public IP/port to connect to for internal-www
+    INTERNAL = sys.argv[1]+":"+sys.argv[2]
+    # Port to use for the proxy. Assumed to be running on localhost
+    PROXY_PORT=int(sys.argv[3])
+
+    with ThreadPoolExecutor(max_workers=NUM_THREADS) as e:
+        futures = []
+        for _ in range(NUM_THREADS):
+            thread_id = random.randint(3, 2**31)
+            logger.info("Starting thread with ID {}".format(thread_id))
+            futures.append(e.submit(run_thread, thread_id))
+
+        for future in as_completed(futures):
+            if future.exception():
+                raise future.exception()
