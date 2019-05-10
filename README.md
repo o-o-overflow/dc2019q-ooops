@@ -36,10 +36,10 @@ The premise of this challenge is to leverage a bug in a proxy server to get a un
 - [x] Reduce permissions so exploitable SQLi can't be used to drop pending requests (split into 2 databases or use real SQL?)
 - [x] Update info.pac with load-balanced url 
 - [x] Add captcha to unblock requests
+- [d] Write automated end-to-end exploit for testing
 - [ ] Stress test and update info.yaml with number of allowed connections
 - [ ] Debug issues building container with `./tester` (though manual building works)
 - [ ] Don't use sequential IDs on internal-www so teams can't steal exploits
-- [ ] Write automated end-to-end exploit for testing
 - [ ]  (Optional) Add more CSS to make everything look better
 - [x] Consider switching back to phantomJS for faster xss testing
 - [ ]  (Optional) Switch internal server to gunicorn or something more reliable for admin
