@@ -66,10 +66,14 @@ def view_request(uid):
 		print("INTERNALWWW: Invalid SQL query: {}".format(q))
 		return render_template("error.html", msg="SQL Error: {}".format(e))
 
-	try: int(uid) except ValueError:
+	if " " in uid:
 		print("INTERNALWWW: Possible SQLi attempt! Query={}".format(uid))
 
-	url = str(row["url"])
+	try:
+		# Should be bytes unless SQLi has happened
+		url = row["url"].decode('ascii')
+	except AttributeError: # If there's SQLi it could be an int
+		url = row["url"]
 
 	return render_template("view.html", row=row, url=url, q=q)
 
