@@ -156,7 +156,7 @@ class FilterProxyRequest(proxy.ProxyRequest):
         if self.method.upper() == b'POST':
             msg = "Missing arguments" # Default for a post
 
-        if "review.html" in local_file:
+        if "reviewed.html" in local_file:
             msg = "Missing data. <a href='{}'>Try again</a>".format(PROXY_BASE+"/review.html")
 
         if b'url' in self.args and b'captcha_guess' in self.args and \

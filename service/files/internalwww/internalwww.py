@@ -67,10 +67,11 @@ def view_request(uid):
 		return render_template("error.html", msg="SQL Error: {}".format(e))
 
 	try:
-		url = row["url"].decode("ascii")
+		url = row["url"].decode("ascii") # Should return a string which we decode
 	except Exception as e:
 		print("Possible SQLi attempt. Returning {}. Exn={}".format(", ".join([str(x) for x in row]), e))
-		url = "error"
+		url = str(row["url"]) # If it's a number it's probably sqli so just log and keep going
+
 	return render_template("view.html", row=row, url=url, q=q)
 
 @app.route('/css/bootstrap.min.css')
