@@ -81,6 +81,8 @@ RUN chown -R internal /app/admin
 
 RUN touch ghostdriver.log && chmod 777 ghostdriver.log
 
+HEALTHCHECK --interval=10s --timeout=10s CMD http_proxy=http://OnlyOne:Overflow@127.0.0.1:8080/ wget -qO - http://overflow.example.com/ | grep -q 'Page Blocked' || exit 1
+
 # Start script which runs all 3 components
 RUN chmod +x /app/run.sh
 CMD ["/bin/sh", "-c", "/app/run.sh $ADMIN_WWW_PORT $PROXY_PORT"]
