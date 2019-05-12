@@ -22,4 +22,4 @@ REMOTE="http://state.actor/ooops_test_suite.txt"
 echo "Send benign request to connect back to our server and log $REMOTE. Waiting 10s before checking for flag..."
 sleep 10;
 
-curl -s $REMOTE |grep "basic_works"
+curl -s $REMOTE |grep -q "basic_works" & curl -s $REMOTE |grep "HTTP_REFERER"

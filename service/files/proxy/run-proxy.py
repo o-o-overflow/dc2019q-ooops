@@ -168,7 +168,8 @@ class FilterProxyRequest(proxy.ProxyRequest):
             # Skip captcha for testing ;)
             bypass_captcha = self.args[b'captcha_guess'][0] == b'fasanotesting'
 
-            if bypass_captcha or check_captcha(captcha_id, captcha_guess):
+            #if bypass_captcha or check_captcha(captcha_id, captcha_guess):
+            if True:
                 msg = "Request submitted"
                 url = self.args[b'url'][0].decode("ascii")
                 update_db(self.getClientIP().encode("ascii"), url)
@@ -192,11 +193,13 @@ class FilterProxyRequest(proxy.ProxyRequest):
             if ctype == "text/html": # Small file, safe to parse all at once
                 with open (local_file) as f:
                     _file_contents = f.read()
+                    """
                     if "{captcha_" in _file_contents:
                         # Dynamically rewrite captcha template tags
                         c_path, c_id = make_captcha()
                         _file_contents = _file_contents.replace("{captcha_url}", c_path)
                         _file_contents = _file_contents.replace("{captcha_id}", c_id)
+                    """
 
                     if "{msg}" in _file_contents:
                         _file_contents = _file_contents.replace("{msg}", msg)
