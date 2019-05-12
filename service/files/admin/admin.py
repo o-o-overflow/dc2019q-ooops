@@ -59,8 +59,7 @@ def do_request(driver, rid, url):
         logger.warn("Skipping request of malformed url {}".format(dec_url))
         return False
 
-    #s = time.time()
-    #logger.info("Loading {} requested by {}".format(url, requested_by))
+    s = time.time()
     internal_url = "http://{}/admin/view/{}".format(INTERNAL, rid)
     logger.info("Loading {} indirectly via {}".format(dec_url, internal_url))
 
@@ -71,11 +70,13 @@ def do_request(driver, rid, url):
     try:
         driver.get(internal_url)
     except TimeoutException as e:
-        logger.warning("Timeout loading {}".format(internal_url))
-        logger.warning("Exception: {}".format(e))
+        logger.warning("Timeout loading INTERNAL {}".format(internal_url))
         return False
     except UnexpectedAlertPresentException as e:
         logger.info("Saw alert: {}".format(e))
+    except Exception as e:
+        logger.warning("ADMIN: Unexpected exception in browser: {}".format(e))
+        return False
 
     #logger.info("INTERNAL PAGE: {}".format(driver.page_source))
 
@@ -84,17 +85,27 @@ def do_request(driver, rid, url):
     except NoSuchElementException:
         logger.warning("Couldn't find lnk in page: {}".format(driver.page_source))
         return False
+    except Exception as e:
+        logger.warning("ADMIN: Unexpected exception clicking link: {}".format(e))
+        return False
 
     try:
         lnk.click()
         driver.implicitly_wait(TIMEOUT)
     except UnexpectedAlertPresentException as e:
         logger.info("Saw alert: {}".format(e))
+    except TimeoutException as e:
+        logger.warning("Timeout loading EXTERNAL {}".format(internal_url))
+        return False
+    except Exception as e:
+        logger.warning("ADMIN: Unexpected exception in browser: {}".format(e))
+        return False
+
 
     #logger.info("EXTERNAL PAGE: {}".format(driver.page_source))
 
-    #e = time.time()
-    #print("\t Request took {:f} seconds".format(e-s))
+    e = time.time()
+    logger.info("\t Total request processing took {:f} seconds".format(e-s))
     return True
 
 def run_it(thread_id):
@@ -130,7 +141,13 @@ def run_it(thread_id):
             successes = []
             errors = []
             for req in to_process:
-                if do_request(driver, req[0], req[3]):
+                try:
+                    success = do_request(driver, req[0], req[3])
+                except Exception as e:
+                    success = False
+                    logger.warning("Unhandled exception in do_request: {}".format(e))
+
+                if success:
                     successes.append(req[0])
                 else:
                     errors.append(req[0])
