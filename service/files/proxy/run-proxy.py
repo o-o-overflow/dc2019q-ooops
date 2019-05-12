@@ -159,14 +159,15 @@ class FilterProxyRequest(proxy.ProxyRequest):
         if "reviewed.html" in local_file:
             msg = "Missing data. <a href='{}'>Try again</a>".format(PROXY_BASE+"/review.html")
 
-        if b'url' in self.args and b'captcha_guess' in self.args and \
-            b'captcha_id' in self.args:
+        #if b'url' in self.args and b'captcha_guess' in self.args and \
+        #    b'captcha_id' in self.args:
 
-            captcha_guess = self.args[b'captcha_guess'][0].decode("ascii")
-            captcha_id = self.args[b'captcha_id'][0].decode("ascii")
+        if b'url' in self.args:
+            #captcha_guess = self.args[b'captcha_guess'][0].decode("ascii")
+            #captcha_id = self.args[b'captcha_id'][0].decode("ascii")
 
             # Skip captcha for testing ;)
-            bypass_captcha = self.args[b'captcha_guess'][0] == b'fasanotesting'
+            #bypass_captcha = self.args[b'captcha_guess'][0] == b'fasanotesting'
 
             #if bypass_captcha or check_captcha(captcha_id, captcha_guess):
             if True:
