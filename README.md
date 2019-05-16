@@ -13,7 +13,7 @@ Author: [@AndrewFasano](https://twitter.com/andrewfasano)
 Download: [service/info.pac](public_files/info.pac). Note competitors should only start with this file, not the IP address of the webserver.
 
 ## Running the Challenge Locally
-You can build and launch the docker container with the following command. Instead of using info.pac, use [service/local.pac](local.pac) and replace the `url` variable with the IP address of your docker container.
+You can build and launch the docker container with the following command. Instead of using info.pac, use [service/local.pac](service/local.pac) and replace the `url` variable with the IP address of your docker container.
 ```
 docker build -t dc2019q:ooops ./service && docker run -it --rm -p 8080:8080 -p5000:5000 dc2019q:ooops
 ```
