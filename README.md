@@ -10,10 +10,10 @@ Difficulty: Hard
 
 Author: [@AndrewFasano](https://twitter.com/andrewfasano)
 
-Download: [public_files/info.pac](public_files/info.pac).
+Download: [public_files/info.pac](public_files/info.pac). Note competitiors should only start with this file, not the IP address of the webserver.
 
 ## Running the Challenge Locally
-You can build and launch the docker container with the following command. Note that if you encounter `ooops.quals2019.oooverflow.io` (in info.pac), you'll need to replace that with your docker container's IP address.
+You can build and launch the docker container with the following command. Instead of using info.pac, use [public_files/local.pac](local.pac) and replace the `u` variable with the ip address of your docker container.
 ```
 docker build -t dc2019q:ooops ./service && docker run -it --rm -p 8080:8080 -p5000:5000 dc2019q:ooops
 ```
